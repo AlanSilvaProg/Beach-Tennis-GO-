@@ -1,0 +1,107 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &9080342151641529030
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2510436244060544219, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: facingYaw
+      value: 180
+      objectReference: {fileID: 0}
+    - target: {fileID: 6257263802463680695, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_Name
+      value: AIRacket
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6958585963388224668, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 6257263802463680695, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1036063075659284140}
+  m_SourcePrefab: {fileID: 100100000, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+--- !u!1 &2942433120593937009 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 6257263802463680695, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+  m_PrefabInstance: {fileID: 9080342151641529030}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1036063075659284140
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2942433120593937009}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef1ebacbdd39c4847b9bbdf267e7ab26, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AiRacketController
+  restPosition: {x: 0, y: 1, z: 4.8}
+  speedBase: 4.5
+  speedPerLevel: 0.9
+  errorBase: 0.9
+  errorPerLevel: -0.06
+  errorMin: 0.1
+  mistakeBase: 0.2
+  mistakePerLevel: -0.016
+  mistakeMin: 0.02
+  mistakeOffset: 1.2
+  shotMistakeBase: 0.1
+  shotMistakePerLevel: -0.008
+  shotMistakeMin: 0.01
+  reactionBase: 0.3
+  reactionPerLevel: -0.025
+  reactionMin: 0.03
+  serveReaction: 0.45
+  flightBase: 1.1
+  flightPerLevel: -0.04
+  flightMin: 0.55
+  flightJitter: {x: 0.9, y: 1.15}
+  depthRange: {x: 1.5, y: 7.4}
+  landXRange: {x: 0.3, y: 3.5}
+  aimAwayChance: 0.7
