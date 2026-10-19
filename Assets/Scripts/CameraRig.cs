@@ -1,75 +1,182 @@
 using UnityEngine;
 
-// Keeps the whole court (both baselines and sidelines) in view for any screen shape.
-// Pulls back a little while serving and moves in once the rally starts.
+// Follows the match from behind the player's baseline. Nothing is scaled: the view is just closer.
+//  - Distance: `distanceFactor` x the distance at which the whole court fits (below 1 = closer, rackets look bigger).
+//  - Centre of the view: `lookAt`.
+//  - Sideways: slides with the player's racket (`followX`), up to `maxPan` metres.
+//  - Pull-back: if the racket would leave the screen (e.g. going back for the serve), the camera backs off just
+//    enough to keep it visible, but never further than `maxPullback` x the base distance.
+//
+// Runs in the editor too: changing any value here (or moving the court or the racket) updates the Game view
+// straight away, so what you see is what the match starts with.
+[ExecuteAlways]
 [RequireComponent(typeof(Camera))]
 public class CameraRig : MonoBehaviour
 {
     public Court court;
-    [Tooltip("Point the camera always looks at.")]
-    public Vector3 lookAt = new Vector3(0f, 0.6f, 1f);
+    [Tooltip("Racket the camera keeps in view and follows sideways. Found automatically when left empty.")]
+    public Racket playerRacket;
+
+    [Header("View")]
+    [Tooltip("Centre of the view: the camera always looks at this point (before the sideways pan).")]
+    public Vector3 lookAt = new Vector3(0f, 0.6f, 0.5f);
     [Tooltip("Look-down angle in degrees.")]
     public float pitch = 32f;
     public float fieldOfView = 50f;
-    [Tooltip("Extra court area (m) that must stay visible around the lines.")]
+
+    [Header("Distance")]
+    [Tooltip("Screen shape (width / height) used to work out the whole-court distance. The camera distance does not change with the real screen shape, so portrait and landscape get the same position.")]
+    public float referenceAspect = 1.6f;
+    [Tooltip("Camera distance as a fraction of the distance that shows the whole court at the reference aspect. 1 = whole court, lower = closer.")]
+    [Range(0.4f, 1.5f)] public float distanceFactor = 0.72f;
+    [Tooltip("Extra court area (m) that must be visible when working out the whole-court distance.")]
     public float margin = 0.15f;
-    [Tooltip("Fraction of the screen kept free at the edges.")]
+    [Tooltip("Fraction of the screen kept free at the edges for the whole-court distance.")]
     [Range(0f, 0.3f)] public float viewportPadding = 0.02f;
-    public float minDistance = 6f;
-    public float fitStep = 0.2f;
-    [Tooltip("How much further back the camera sits while serving.")]
-    public float serveDistanceFactor = 1.1f;
-    public float smoothTime = 0.6f;
+    public float minDistance = 3f;
+
+    [Header("Sideways follow")]
+    [Tooltip("How much of the racket's sideways position the camera copies (0 = fixed, 1 = locked to the racket).")]
+    [Range(0f, 1f)] public float followX = 0.6f;
+    [Tooltip("Furthest the camera slides sideways from the centre (m).")]
+    public float maxPan = 2f;
+
+    [Header("Keep the racket in view")]
+    [Tooltip("Screen border (fraction) the racket must stay inside; the camera backs off to respect it.")]
+    public Vector2 racketPadding = new Vector2(0.08f, 0.1f);
+    [Tooltip("Furthest the camera may back off, as a multiple of the base distance.")]
+    [Range(1f, 2f)] public float maxPullback = 1.3f;
+    [Tooltip("Extra distance (multiple of the base) kept while serving, on top of what the racket needs.")]
+    [Range(1f, 1.5f)] public float serveDistanceFactor = 1f;
+    [Tooltip("How long the camera takes to catch up with its target (s). Lower = faster.")]
+    [Min(0.01f)] public float moveSmoothTime = 0.2f;
+
+    [Header("Editor preview")]
+    [Tooltip("Edit mode only: preview the serve view (true) or the rally view (false).")]
+    public bool previewServing = true;
+
+    const int PullbackSteps = 12;
 
     Camera cam;
-    Vector3 playPos, servePos, velocity;
+    Vector3 velocity;
+    float fitDistance;
     bool serving = true;
-    float lastAspect;
+    Vector3 dir;
 
-    void Awake()
+    void OnEnable()
     {
         cam = GetComponent<Camera>();
+        FindRacket();
+        Snap();
+    }
+
+    void OnValidate()
+    {
+        if (!isActiveAndEnabled || Application.isPlaying) return;
+        cam = GetComponent<Camera>();
+        Snap();
+    }
+
+    // Puts the camera straight at its target (used at start and in the editor, where there is no smoothing).
+    void Snap()
+    {
+        if (cam == null || court == null) return;
         Refit();
-        transform.position = servePos;
-        transform.LookAt(lookAt);
+        // Only write when something changed, so the editor does not mark the scene dirty on every repaint.
+        Quaternion rot = Quaternion.Euler(pitch, 0f, 0f);
+        Vector3 pos = Target();
+        if (transform.rotation != rot) transform.rotation = rot;
+        if ((transform.position - pos).sqrMagnitude > 1e-8f) transform.position = pos;
+        velocity = Vector3.zero;
     }
 
     public void SetServing(bool value) { serving = value; }
 
-    void LateUpdate()
+    void FindRacket()
     {
-        if (!Mathf.Approximately(lastAspect, cam.aspect)) Refit();
-        transform.position = Vector3.SmoothDamp(transform.position, serving ? servePos : playPos, ref velocity, smoothTime);
-        transform.LookAt(lookAt);
+        if (playerRacket != null) return;
+        var controller = FindFirstObjectByType<PlayerRacketController>();
+        if (controller != null) playerRacket = controller.Racket;
     }
 
+    void LateUpdate()
+    {
+        if (court == null) return;
+        if (!Application.isPlaying) { Snap(); return; }
+        transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
+        transform.position = Vector3.SmoothDamp(transform.position, Target(), ref velocity, moveSmoothTime);
+    }
+
+    float BaseDistance => Mathf.Max(minDistance, fitDistance * distanceFactor);
+
+    // Where the camera wants to be: panned to the racket, then backed off until the racket fits.
+    Vector3 Target()
+    {
+        float pan = 0f;
+        if (playerRacket != null) pan = Mathf.Clamp(playerRacket.Position.x * followX, -maxPan, maxPan);
+        Vector3 centre = lookAt + new Vector3(pan, 0f, 0f);
+
+        bool serve = Application.isPlaying ? serving : previewServing;
+        float lo = BaseDistance * (serve ? serveDistanceFactor : 1f);
+        float hi = Mathf.Max(lo, BaseDistance * maxPullback);
+        float d = hi;
+        for (int i = 0; i <= PullbackSteps; i++)
+        {
+            float candidate = Mathf.Lerp(lo, hi, i / (float)PullbackSteps);
+            if (RacketVisible(centre + dir * candidate)) { d = candidate; break; }
+        }
+        return centre + dir * d;
+    }
+
+    // Is the racket (its hit circle) inside the padded screen if the camera sits at `pos`?
+    bool RacketVisible(Vector3 pos)
+    {
+        if (playerRacket == null) return true;
+        Vector3 c = playerRacket.Position;
+        float r = playerRacket.hitRadius;
+        return Inside(new Vector3(c.x, c.y, c.z - r), pos) && Inside(new Vector3(c.x - r, c.y, c.z), pos)
+            && Inside(new Vector3(c.x + r, c.y, c.z), pos) && Inside(new Vector3(c.x, c.y, c.z + r), pos);
+    }
+
+    bool Inside(Vector3 world, Vector3 camPos)
+    {
+        if (!Project(world, camPos, cam.aspect, out Vector2 vp)) return false;
+        return vp.x >= racketPadding.x && vp.x <= 1f - racketPadding.x && vp.y >= racketPadding.y && vp.y <= 1f - racketPadding.y;
+    }
+
+    // Viewport position of a world point for a camera at `camPos` (rotation is always the same pitch, no yaw).
+    bool Project(Vector3 world, Vector3 camPos, float aspect, out Vector2 vp)
+    {
+        Vector3 local = Quaternion.Inverse(Quaternion.Euler(pitch, 0f, 0f)) * (world - camPos);
+        float tanV = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+        vp = Vector2.zero;
+        if (local.z <= 0.01f) return false;
+        vp = new Vector2(0.5f + 0.5f * local.x / (local.z * tanV * aspect), 0.5f + 0.5f * local.y / (local.z * tanV));
+        return true;
+    }
+
+    // Distance at which the whole court is visible at the reference screen shape (independent of the real one).
     void Refit()
     {
-        lastAspect = cam.aspect;
         cam.fieldOfView = fieldOfView;
-        Vector3 dir = new Vector3(0f, Mathf.Sin(pitch * Mathf.Deg2Rad), -Mathf.Cos(pitch * Mathf.Deg2Rad));
-        Vector3 oldPos = transform.position;
+        dir = new Vector3(0f, Mathf.Sin(pitch * Mathf.Deg2Rad), -Mathf.Cos(pitch * Mathf.Deg2Rad));
         float hw = court.halfWidth + margin, hl = court.halfLength + margin;
         Vector3[] corners =
         {
             new Vector3(-hw, 0f, -hl), new Vector3(hw, 0f, -hl), new Vector3(-hw, 0f, hl), new Vector3(hw, 0f, hl)
         };
+        Vector3 centre = new Vector3(0f, lookAt.y, lookAt.z);
         float d = minDistance;
-        for (int i = 0; i < 400; i++, d += fitStep)
+        for (int i = 0; i < 400; i++, d += 0.2f)
         {
-            transform.position = lookAt + dir * d;
-            transform.LookAt(lookAt);
             bool ok = true;
             foreach (var c in corners)
             {
-                Vector3 v = cam.WorldToViewportPoint(c);
-                if (v.z <= 0f || v.x < viewportPadding || v.x > 1f - viewportPadding
-                    || v.y < viewportPadding || v.y > 1f - viewportPadding) { ok = false; break; }
+                if (!Project(c, centre + dir * d, referenceAspect, out Vector2 v)
+                    || v.x < viewportPadding || v.x > 1f - viewportPadding || v.y < viewportPadding || v.y > 1f - viewportPadding) { ok = false; break; }
             }
             if (ok) break;
         }
-        playPos = lookAt + dir * d;
-        servePos = lookAt + dir * (d * serveDistanceFactor);
-        transform.position = oldPos;
+        fitDistance = d;
     }
 }

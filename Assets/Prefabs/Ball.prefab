@@ -561,7 +561,7 @@ MonoBehaviour:
   marker: {fileID: 7972003142135060735}
   diameter: 1.6
   lift: 0.02
-  fadeInTime: 0.6
+  appearTime: 0.1
   minSpeed: 0.5
 --- !u!1 &8943047851352868138
 GameObject:

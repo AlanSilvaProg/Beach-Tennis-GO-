@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Soft radial pulse on the ground showing where the ball will come down. Follows the ball's current
+// Small contracting waves on the ground showing where the ball will come down (they start at the full size and shrink to the centre). Follows the ball's current
 // trajectory (so it updates after every hit) and hides while the ball is held, grounded or hidden.
 [RequireComponent(typeof(Ball))]
 public class LandingMarker : MonoBehaviour
@@ -10,8 +10,8 @@ public class LandingMarker : MonoBehaviour
     public float diameter = 1.6f;
     [Tooltip("Height above the ground (must clear the court lines and the shadow).")]
     public float lift = 0.02f;
-    [Tooltip("Marker fades in over this many seconds of flight time remaining (0 = always full).")]
-    public float fadeInTime = 0.6f;
+    [Tooltip("The marker fades in over this many seconds once the ball has been hit (0 = instantly).")]
+    public float appearTime = 0.1f;
     [Tooltip("Ignored below this speed (the ball hanging for the serve).")]
     public float minSpeed = 0.5f;
 
@@ -20,6 +20,7 @@ public class LandingMarker : MonoBehaviour
     Ball ball;
     Court court;
     MaterialPropertyBlock block;
+    float shownFor;
 
     void Awake()
     {
@@ -54,12 +55,13 @@ public class LandingMarker : MonoBehaviour
         }
 
         marker.enabled = flying;
-        if (!flying) return;
+        if (!flying) { shownFor = 0f; return; }
+        shownFor += Time.deltaTime;
 
         marker.transform.SetPositionAndRotation(new Vector3(hit.x, court.groundY + lift, hit.z), Quaternion.Euler(90f, 0f, 0f));
         if (block == null) block = new MaterialPropertyBlock();
         marker.GetPropertyBlock(block);
-        block.SetFloat(Intensity, fadeInTime <= 0f ? 1f : Mathf.Clamp01(1f - t / fadeInTime * 0.5f));
+        block.SetFloat(Intensity, appearTime <= 0f ? 1f : Mathf.Clamp01(shownFor / appearTime));
         marker.SetPropertyBlock(block);
     }
 

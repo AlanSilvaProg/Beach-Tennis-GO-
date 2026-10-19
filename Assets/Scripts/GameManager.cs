@@ -41,6 +41,8 @@ public class GameManager : MonoBehaviour
     public float serveArmDistance = 0.4f;
     [Tooltip("The player must swing the racket forward at least this fast (m/s) to hit the serve ball.")]
     public float serveMinHitSpeed = 0.4f;
+    [Tooltip("The serve is hit when the racket is this close to the ball (m) or has passed its closest point, so the full speed and direction of the swipe are measured.")]
+    public float serveContactRadius = 0.12f;
 
     [Header("Simulation")]
     [Tooltip("Multiplies how fast the ball travels. Arcs stay the same, the ball just gets there sooner.")]
@@ -59,11 +61,14 @@ public class GameManager : MonoBehaviour
     float rallyTime;
     float accumulator;
     bool serveArmed;
+    float servePrevDz = float.NaN; // racket-to-ball distance along z last frame (NaN = it was out of reach)
 
     public Ball Ball => ball;
     public Net Net => net;
     public AiRacketController Ai => ai;
     public Court Court => court;
+    // Simulated ball seconds per real second (the ball arcs are the same, it just gets there sooner).
+    public float BallSpeed => ballSpeed;
     public PlayerRacketController Player => player;
     public bool AiShouldChase => state == State.Rally && lastHitter == 0;
     public bool AiServing => state == State.Serving && server == 1;
@@ -149,6 +154,7 @@ public class GameManager : MonoBehaviour
     {
         float z = (server == 0 ? -1f : 1f) * (court.halfLength - serveBaselineOffset);
         serveArmed = false;
+        servePrevDz = float.NaN;
         ball.Place(new Vector3(server == 0 ? player.Racket.Position.x : Random.Range(-serveBallSpread, serveBallSpread),
                                serveBallHeight, z), Vector3.zero);
         ball.SetVisible(true);
@@ -161,7 +167,7 @@ public class GameManager : MonoBehaviour
     {
         Vector3 p = ball.Position, c = r.Position;
         float dx = p.x - c.x, dz = p.z - c.z;
-        return dx * dx + dz * dz <= r.hitRadius * r.hitRadius; // height is ignored: the ball can never fly over the racket
+        return dx * dx + dz * dz <= r.hitRadius * r.hitRadius && p.y <= r.MaxHitY; // balls above the vertical reach fly over
     }
 
     // The ball follows the racket sideways. It only accepts a hit after the racket has been pulled back behind it,
@@ -174,7 +180,19 @@ public class GameManager : MonoBehaviour
         ball.Sync(court.groundY);
 
         if (Mathf.Abs(r.Position.z) > Mathf.Abs(ball.Position.z) + serveArmDistance) serveArmed = true;
-        if (serveArmed && InReach(r) && r.ForwardSpeed >= serveMinHitSpeed) Hit(0, player);
+        // Do not hit the moment the racket enters reach (its speed is still building up): wait for the closest
+        // point of the swipe, then read force and direction from the swing.
+        bool inReach = InReach(r);
+        float dz = r.Position.z - ball.Position.z;
+        bool wasIn = !float.IsNaN(servePrevDz);
+        bool crossed = wasIn && dz * servePrevDz <= 0f; // went through the ball between two frames
+        bool contact = Mathf.Abs(dz) <= serveContactRadius || crossed || (wasIn && Mathf.Abs(dz) > Mathf.Abs(servePrevDz));
+        if (serveArmed && (inReach || crossed) && contact && r.SwingForwardSpeed >= serveMinHitSpeed)
+        {
+            Hit(0, player);
+            return;
+        }
+        servePrevDz = inReach ? dz : float.NaN;
     }
 
     void TryAiServe()

@@ -1,12 +1,14 @@
 using UnityEngine;
 
-// Mouse / touch controlled racket. It only slides left/right and forward/back.
+// Mouse / touch controlled racket. It only slides left/right and forward/back, inside the Racket's play area.
 // Forward swipe = power, sideways swipe = power + angle, still or backwards = weak shot.
 public class PlayerRacketController : RacketController
 {
     [Header("Input")]
     public Camera cam;
     public Vector3 restPosition = new Vector3(0f, 1f, -4.8f);
+    [Tooltip("The racket sits this far above the finger/mouse, as a fraction of the screen height (so the pointer does not cover it).")]
+    [Range(0f, 0.25f)] public float pointerLift = 0.06f;
 
     [Header("Power")]
     [Tooltip("Weighted racket speed (m/s) that counts as a full-power shot.")]
@@ -36,12 +38,6 @@ public class PlayerRacketController : RacketController
     [Tooltip("Aimed shots land at least this far inside the lines.")]
     public float landMargin = 0.5f;
 
-    void Awake()
-    {
-        // The player can move the racket anywhere the camera can see (the pointer is kept on screen below).
-        Racket.limitToArea = false;
-    }
-
     public override void ResetPosition()
     {
         Racket.MoveTo(restPosition);
@@ -53,24 +49,34 @@ public class PlayerRacketController : RacketController
         Vector3 pointer = Input.mousePosition;
         if (Input.touchCount > 0) pointer = Input.GetTouch(0).position;
         pointer.x = Mathf.Clamp(pointer.x, 0f, Screen.width);
-        pointer.y = Mathf.Clamp(pointer.y, 0f, Screen.height);
+        pointer.y = Mathf.Clamp(pointer.y + pointerLift * Screen.height, 0f, Screen.height);
         Ray ray = cam.ScreenPointToRay(pointer);
         if (ray.direction.y > -0.0001f) return;
         float t = (Racket.height - ray.origin.y) / ray.direction.y;
-        Racket.MoveTo(ray.origin + ray.direction * t);
+        Vector3 hit = ray.origin + ray.direction * t;
+        // Pointer beyond the net: the racket stops at the net but keeps following the pointer sideways. The sideways
+        // position is then read where the pointer's ray crosses the net line, so it does not drift with the far plane.
+        float netZ = Racket.SideSign * Racket.minDistance;
+        if (Racket.SideSign * hit.z < Racket.minDistance && Mathf.Abs(ray.direction.z) > 0.0001f)
+        {
+            float tn = (netZ - ray.origin.z) / ray.direction.z;
+            if (tn > 0f) hit = new Vector3(ray.origin.x + ray.direction.x * tn, hit.y, netZ);
+        }
+        Racket.MoveTo(hit);
     }
 
     // Any shot above the minimum power lands inside the opponent's court; only a weak touch can fail.
     public override Vector3 ComputeShot(GameManager gm, Vector3 contact)
     {
-        float speedScore = Racket.ForwardSpeed * forwardWeight + Mathf.Abs(Racket.SideSpeed) * sideWeight;
+        float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
+        float speedScore = forwardSpeed * forwardWeight + Mathf.Abs(sideSpeed) * sideWeight;
         float power = Mathf.Clamp01(speedScore / maxSwipeSpeed);
         float dx = contact.x - Racket.Position.x;
 
         Court court = gm.Court;
         float maxX = court.halfWidth - landMargin;
         float maxDepth = court.halfLength - landMargin;
-        float landX = Mathf.Clamp(Racket.SideSpeed * sideSwipeFactor - dx * offCentreFactor, -maxX, maxX);
+        float landX = Mathf.Clamp(sideSpeed * sideSwipeFactor - dx * offCentreFactor, -maxX, maxX);
         // Power above the minimum is remapped to 0-1 for depth and speed.
         float aimed = Mathf.Clamp01((power - minPowerForAimedShot) / (1f - minPowerForAimedShot));
         float landZ = -Racket.SideSign * (shortDepth + (maxDepth - shortDepth) * aimed);

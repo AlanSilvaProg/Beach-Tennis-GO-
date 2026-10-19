@@ -80,7 +80,7 @@ public static class ProjectSetup
         if (mat == null)
         {
             mat = new Material(shader);
-            mat.SetColor("_Color", new Color(1f, 0.95f, 0.6f, 0.55f));
+            mat.SetColor("_CoreColor", new Color(1f, 1f, 0.85f, 1f));
             AssetDatabase.CreateAsset(mat, MatDir + "/LandingPulse.mat");
         }
         var path = PrefabDir + "/Ball.prefab";
@@ -504,6 +504,7 @@ public static class ProjectSetup
         var ball = Spawn<Ball>("Ball");
         var player = Spawn<PlayerRacketController>("PlayerRacket");
         player.cam = cam;
+        rig.playerRacket = player.Racket;
         var ai = Spawn<AiRacketController>("AIRacket");
         player.Racket.MoveTo(player.restPosition);
         ai.Racket.MoveTo(ai.restPosition);

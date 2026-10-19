@@ -363,6 +363,7 @@ MonoBehaviour:
   serveSideMargin: 0.5
   serveArmDistance: 0.4
   serveMinHitSpeed: 0.4
+  serveContactRadius: 0.12
   ballSpeed: 1.6
   targetFrameRate: 60
   physicsStep: 0.004166667
@@ -651,7 +652,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 56
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 0
@@ -2014,7 +2015,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 55
+  field of view: 50
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -2040,8 +2041,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.115047656, y: 0, z: 0, w: 0.99336}
-  m_LocalPosition: {x: 0, y: 6, z: -22}
+  m_LocalRotation: {x: 0.25038, y: 0, z: 0, w: 0.96814764}
+  m_LocalPosition: {x: 0, y: 6.629798, z: -14.875257}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2060,15 +2061,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraRig
   court: {fileID: 1424136727}
-  lookAt: {x: 0, y: 0.6, z: 1}
-  pitch: 32
+  playerRacket: {fileID: 1802069754}
+  lookAt: {x: 0, y: -2.17, z: 1}
+  pitch: 29
   fieldOfView: 50
+  referenceAspect: 1.6
+  distanceFactor: 1.156
   margin: 0.15
   viewportPadding: 0.02
   minDistance: 6
-  fitStep: 0.2
-  serveDistanceFactor: 1.1
-  smoothTime: 0.6
+  followX: 0.6
+  maxPan: 2
+  racketPadding: {x: 0.08, y: 0.1}
+  maxPullback: 1.3
+  serveDistanceFactor: 1.033
+  moveSmoothTime: 0.2
+  previewServing: 1
 --- !u!1001 &1424136726
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2544,6 +2552,17 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1793973244}
   m_CullTransparentMesh: 1
+--- !u!114 &1802069754 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
+  m_PrefabInstance: {fileID: 509159309}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0ac1cdeaaae74a55a1e6e2746d2aadf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Racket
 --- !u!1001 &1819974924
 PrefabInstance:
   m_ObjectHideFlags: 0
