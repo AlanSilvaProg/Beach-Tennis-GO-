@@ -298,8 +298,66 @@ public static class ProjectSetup
         Debug.Log("[BeachTennisGO] HUD canvas added to the scene.");
     }
 
+    const string BallIconPath = "Assets/Sprites/ball2D.png";
+
+    // Creates the "LandingAlert" object under the HUD canvas (once): blinking ball icon + red arrow shown when the landing marker is off screen.
+    static void EnsureLandingAlert()
+    {
+        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var hud = Object.FindFirstObjectByType<HudView>();
+        if (hud == null || hud.scoreText == null) return;
+        if (Object.FindFirstObjectByType<LandingAlert>() != null) return;
+
+        var importer = AssetImporter.GetAtPath(BallIconPath) as TextureImporter;
+        if (importer != null && importer.textureType != TextureImporterType.Sprite)
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.SaveAndReimport();
+        }
+        var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(BallIconPath);
+
+        var canvasTf = hud.scoreText.canvas.transform;
+        var root = new GameObject("LandingAlert", typeof(RectTransform), typeof(CanvasGroup), typeof(LandingAlert));
+        root.transform.SetParent(canvasTf, false);
+        var rootRt = (RectTransform)root.transform;
+        rootRt.anchorMin = Vector2.zero; rootRt.anchorMax = Vector2.one;
+        rootRt.offsetMin = rootRt.offsetMax = Vector2.zero;
+        var group = root.GetComponent<CanvasGroup>();
+        group.alpha = 0f; group.interactable = false; group.blocksRaycasts = false;
+
+        RectTransform MakeImage(string name, Sprite sp, Color color, float size)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(root.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = Vector2.zero; // positioned in screen space from the bottom-left corner
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(size, size);
+            var img = go.GetComponent<Image>();
+            img.sprite = sp; img.color = color; img.raycastTarget = false; img.preserveAspect = true;
+            return rt;
+        }
+
+        var alert = root.GetComponent<LandingAlert>();
+        alert.group = group;
+        alert.icon = MakeImage("Ball", sprite, Color.white, 72f);
+        alert.arrow = MakeImage("Arrow", null, new Color(0.95f, 0.1f, 0.1f, 1f), 40f).GetComponent<Image>();
+        alert.marker = Object.FindFirstObjectByType<LandingMarker>();
+        alert.cam = Camera.main;
+        EditorUtility.SetDirty(alert);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] LandingAlert added to the HUD.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Landing Alert")]
+    public static void AddLandingAlert() { EnsureLandingAlert(); }
+
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()
@@ -346,6 +404,7 @@ public static class ProjectSetup
         EnsureBallMaterial();
         AddAdPanels();
         EnsureHud();
+        EnsureLandingAlert();
         AssetDatabase.SaveAssets();
         Debug.Log("[BeachTennisGO] Setup done: prefabs in Assets/Prefabs, scene Assets/Scene/Gameplay.unity");
     }

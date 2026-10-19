@@ -31,6 +31,12 @@ public class PlayerRacketController : RacketController
     public float fastFlight = 0.5f;
     [Tooltip("Where the gentlest aimed shot lands, measured from the net.")]
     public float shortDepth = 1.5f;
+    [Tooltip("Within this distance of the net, a hit with the racket almost still is a drop shot: high and short over the net.")]
+    public float dropShotDistance = 2.5f;
+    [Tooltip("Where the drop shot lands, measured from the net on the opponent's side.")]
+    public float dropShotDepth = 1.3f;
+    [Tooltip("Flight time of the drop shot; longer means a higher arc.")]
+    public float dropShotFlight = 1.6f;
     [Tooltip("How much sideways swipe speed moves the landing spot.")]
     public float sideSwipeFactor = 0.5f;
     [Tooltip("How much hitting off-centre on the racket moves the landing spot (opposite way).")]
@@ -80,6 +86,12 @@ public class PlayerRacketController : RacketController
         // Power above the minimum is remapped to 0-1 for depth and speed.
         float aimed = Mathf.Clamp01((power - minPowerForAimedShot) / (1f - minPowerForAimedShot));
         float landZ = -Racket.SideSign * (shortDepth + (maxDepth - shortDepth) * aimed);
+
+        if (power < minPowerForAimedShot && Mathf.Abs(contact.z) <= dropShotDistance)
+        {
+            float dropX = Mathf.Clamp(landX, -maxX, maxX);
+            return gm.Ball.SolveHit(contact, dropX, -Racket.SideSign * dropShotDepth, court.groundY + gm.Ball.radius, dropShotFlight, gm.Net);
+        }
 
         if (power < minPowerForAimedShot)
         {
