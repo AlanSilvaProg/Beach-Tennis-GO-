@@ -1,0 +1,44 @@
+name: Release
+
+# O Unity nao roda no runner (exigiria licenca): a build (WebGLBuild/) e gerada localmente com
+# scripts/build-release.sh e versionada. Este workflow empacota essa build e cria o GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag/versao do release (ex.: v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: v
+        run: echo "version=${{ github.event.inputs.version || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate build
+        run: |
+          test -f WebGLBuild/index.html
+          ls WebGLBuild/Build/*.wasm*
+
+      - name: Zip build
+        run: |
+          cd WebGLBuild
+          zip -qr -X "$GITHUB_WORKSPACE/beach-tennis-go-webgl-${{ steps.v.outputs.version }}.zip" . -x "*.DS_Store"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.version }}
+          name: Beach Tennis GO! ${{ steps.v.outputs.version }}
+          generate_release_notes: true
+          files: beach-tennis-go-webgl-${{ steps.v.outputs.version }}.zip

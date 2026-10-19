@@ -24,6 +24,7 @@ public class Court : MonoBehaviour
 
     public void Fit()
     {
+        FitRing();
         float y = groundY + 0.011f;
         if (area != null)
         {
@@ -35,6 +36,13 @@ public class Court : MonoBehaviour
         SetLine(lineLeft, new Vector3(-halfWidth, y, 0f), new Vector3(lineThickness, 0.002f, halfLength * 2f));
         SetLine(lineRight, new Vector3(halfWidth, y, 0f), new Vector3(lineThickness, 0.002f, halfLength * 2f));
         SetLine(lineCentre, new Vector3(0f, y, 0f), new Vector3(halfWidth * 2f, 0.002f, lineThickness));
+    }
+
+    // Keeps the ad boards around the court in step with its dimensions.
+    void FitRing()
+    {
+        var ring = FindFirstObjectByType<AdPanelRing>();
+        if (ring != null && ring.court == this) ring.Fit();
     }
 
     static void SetLine(Transform t, Vector3 pos, Vector3 scale)

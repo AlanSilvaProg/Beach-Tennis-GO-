@@ -1,51 +1,63 @@
 using UnityEngine;
+using UnityEngine.UI;
 
-// Immediate-mode HUD (no Canvas, cheap for WebGL).
+// HUD: score, info line and centre banner. The Canvas and its three Text objects live in the scene
+// (object "HUD"); edit font, size, colour and position directly on them. This script only sets the text.
+// Text is only touched when it changes, because the game logic rewrites the banner every frame.
 public class HudView : MonoBehaviour
 {
-    public int scoreFontSize = 56;
-    public int infoFontSize = 24;
-    public int bannerFontSize = 24;
-    public Color textColor = Color.white;
-    public Color shadowColor = new Color(0f, 0f, 0f, 0.7f);
-    [Tooltip("Banner vertical position as a fraction of the screen height.")]
-    [Range(0f, 1f)] public float bannerY = 0.38f;
+    public Text scoreText;
+    public Text infoText;
+    public Text bannerText;
 
-    public bool ShowScore { get; set; }
-    public string Score { get; set; } = "";
-    public string Info { get; set; } = "";
-    public string Banner { get; set; } = "";
+    string score = "", info = "", banner = "";
+    bool showScore;
 
-    GUIStyle big, mid;
-
-    void OnGUI()
+    void Awake()
     {
-        float s = Screen.height / 720f;
-        if (big == null)
-        {
-            big = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-            mid = new GUIStyle(big);
-        }
-        big.fontSize = Mathf.RoundToInt(scoreFontSize * s);
-        mid.fontSize = Mathf.RoundToInt(infoFontSize * s);
+        Apply(scoreText, score);
+        Apply(infoText, info);
+        Apply(bannerText, banner);
+        SetScoreVisible(showScore);
+    }
 
-        if (ShowScore)
+    public bool ShowScore
+    {
+        get => showScore;
+        set
         {
-            Draw(new Rect(0, 10 * s, Screen.width, 70 * s), Score, big);
-            Draw(new Rect(0, 78 * s, Screen.width, 30 * s), Info, mid);
-        }
-        if (!string.IsNullOrEmpty(Banner))
-        {
-            mid.fontSize = Mathf.RoundToInt(bannerFontSize * s);
-            Draw(new Rect(0, Screen.height * bannerY, Screen.width, 140 * s), Banner, mid);
+            if (showScore == value) return;
+            showScore = value;
+            SetScoreVisible(value);
         }
     }
 
-    void Draw(Rect r, string text, GUIStyle style)
+    public string Score
     {
-        style.normal.textColor = shadowColor;
-        GUI.Label(new Rect(r.x + 2, r.y + 2, r.width, r.height), text, style);
-        style.normal.textColor = textColor;
-        GUI.Label(r, text, style);
+        get => score;
+        set { if (score == value) return; score = value; Apply(scoreText, value); }
+    }
+
+    public string Info
+    {
+        get => info;
+        set { if (info == value) return; info = value; Apply(infoText, value); }
+    }
+
+    public string Banner
+    {
+        get => banner;
+        set { if (banner == value) return; banner = value; Apply(bannerText, value); }
+    }
+
+    void SetScoreVisible(bool visible)
+    {
+        if (scoreText != null) scoreText.enabled = visible;
+        if (infoText != null) infoText.enabled = visible;
+    }
+
+    static void Apply(Text t, string value)
+    {
+        if (t != null) t.text = value;
     }
 }

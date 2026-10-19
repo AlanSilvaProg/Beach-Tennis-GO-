@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.UI;
 
 // Builds the Gameplay scene, materials and lightweight WebGL settings.
 // Run from the menu: Tools > Beach Tennis GO > Setup Project
@@ -15,13 +16,20 @@ public static class ProjectSetup
     [InitializeOnLoadMethod]
     static void AutoSetup()
     {
-        EditorApplication.delayCall += () =>
+        EditorApplication.delayCall += TryAutoSetup;
+        // If the scripts reloaded while in Play mode, try again once back in Edit mode.
+        EditorApplication.playModeStateChanged += state =>
         {
-            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling) return;
-            if (!NeedsSetup()) return;
-            Debug.Log("[BeachTennisGO] Missing prefabs or scene content, running Setup Project...");
-            Run(false);
+            if (state == PlayModeStateChange.EnteredEditMode) EditorApplication.delayCall += TryAutoSetup;
         };
+    }
+
+    static void TryAutoSetup()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling) return;
+        if (!NeedsSetup()) return;
+        Debug.Log("[BeachTennisGO] Missing prefabs or scene content, running Setup Project...");
+        Run(false);
     }
 
     static bool BallHasTrail()
@@ -56,9 +64,263 @@ public static class ProjectSetup
         return t;
     }
 
+    static bool BallHasLandingMarker()
+    {
+        return System.IO.File.Exists(PrefabDir + "/Ball.prefab")
+            && System.IO.File.ReadAllText(PrefabDir + "/Ball.prefab").Contains("Assembly-CSharp::LandingMarker");
+    }
+
+    // Adds the landing pulse to the Ball prefab without touching anything else in it.
+    static void EnsureLandingMarker()
+    {
+        if (BallHasLandingMarker()) return;
+        var shader = Shader.Find("BeachTennisGO/LandingPulse");
+        if (shader == null) { Debug.LogWarning("[BeachTennisGO] LandingPulse shader not found yet."); return; }
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(MatDir + "/LandingPulse.mat");
+        if (mat == null)
+        {
+            mat = new Material(shader);
+            mat.SetColor("_Color", new Color(1f, 0.95f, 0.6f, 0.55f));
+            AssetDatabase.CreateAsset(mat, MatDir + "/LandingPulse.mat");
+        }
+        var path = PrefabDir + "/Ball.prefab";
+        var root = PrefabUtility.LoadPrefabContents(path);
+        var lm = root.AddComponent<LandingMarker>();
+        var quad = Primitive(PrimitiveType.Quad, "LandingMarker", root.transform, Vector3.zero, Vector3.one, mat);
+        quad.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        lm.marker = quad.GetComponent<Renderer>();
+        lm.marker.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lm.marker.receiveShadows = false;
+        lm.marker.enabled = false;
+        lm.marker.transform.localScale = new Vector3(lm.diameter, lm.diameter, 1f);
+        PrefabUtility.SaveAsPrefabAsset(root, path);
+        PrefabUtility.UnloadPrefabContents(root);
+        Debug.Log("[BeachTennisGO] Landing marker added to Ball prefab.");
+    }
+
+    const string AdSpritePath = "Assets/Sprites/publi.jpeg";
+    const string AdPanelPrefab = PrefabDir + "/AdPanel.prefab";
+
+    static bool SceneHasAdPanels()
+    {
+        return System.IO.File.Exists(ScenePath) && System.IO.File.ReadAllText(ScenePath).Contains(AssetDatabase.AssetPathToGUID("Assets/Scripts/AdPanelRing.cs"));
+    }
+
+    // Small WebGL-friendly import: sprite, crunched DXT1, mipmaps for the oblique view, no alpha.
+    static void ConfigureAdSprite()
+    {
+        var imp = AssetImporter.GetAtPath(AdSpritePath) as TextureImporter;
+        if (imp == null || imp.userData == "btgo-ad-v1") return;
+        imp.textureType = TextureImporterType.Sprite;
+        imp.spriteImportMode = SpriteImportMode.Single;
+        var ts = new TextureImporterSettings();
+        imp.ReadTextureSettings(ts);
+        ts.spriteMeshType = SpriteMeshType.FullRect;
+        imp.SetTextureSettings(ts);
+        imp.mipmapEnabled = true;
+        imp.filterMode = FilterMode.Bilinear;
+        imp.anisoLevel = 4;
+        imp.wrapMode = TextureWrapMode.Clamp;
+        imp.alphaSource = TextureImporterAlphaSource.None;
+        imp.alphaIsTransparency = false;
+        imp.textureCompression = TextureImporterCompression.Compressed;
+        imp.crunchedCompression = true;
+        imp.compressionQuality = 75;
+        imp.maxTextureSize = 1024;
+        var web = imp.GetPlatformTextureSettings("WebGL");
+        web.overridden = true;
+        web.maxTextureSize = 1024;
+        web.format = TextureImporterFormat.DXT1Crunched;
+        web.compressionQuality = 75;
+        imp.SetPlatformTextureSettings(web);
+        imp.userData = "btgo-ad-v1";
+        imp.SaveAndReimport();
+    }
+
+    static void EnsureAdPrefab()
+    {
+        if (System.IO.File.Exists(AdPanelPrefab)) return;
+        var shader = Shader.Find("BeachTennisGO/AdPanel");
+        if (shader == null) { Debug.LogWarning("[BeachTennisGO] AdPanel shader not found yet."); return; }
+        var screenMat = new Material(shader);
+        AssetDatabase.CreateAsset(screenMat, MatDir + "/AdPanel.mat");
+        var frameMat = Mat("AdFrame", new Color(0.08f, 0.08f, 0.1f));
+
+        var root = new GameObject("AdPanel");
+        var panel = root.AddComponent<AdPanel>();
+        panel.frame = Primitive(PrimitiveType.Cube, "Frame", root.transform, Vector3.zero, Vector3.one, frameMat).transform;
+        var front = Primitive(PrimitiveType.Quad, "ScreenFront", root.transform, new Vector3(0f, 0f, -0.06f), Vector3.one, screenMat);
+        var back = Primitive(PrimitiveType.Quad, "ScreenBack", root.transform, new Vector3(0f, 0f, 0.06f), Vector3.one, screenMat);
+        back.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+        panel.screens = new[] { front.GetComponent<Renderer>(), back.GetComponent<Renderer>() };
+        panel.sprites = new[] { AssetDatabase.LoadAssetAtPath<Sprite>(AdSpritePath) };
+        panel.Fit();
+        Save(root, "AdPanel");
+    }
+
+    // Stadium-style perimeter: a closed rectangle of boards around the court, facing inwards, with no gaps
+    // at the corners. Every other board loops (staggered); the rest stay idle.
+    static void EnsureAdPanelsInScene(bool rebuild = false)
+    {
+        if (!System.IO.File.Exists(AdPanelPrefab)) return;
+        if (!rebuild && SceneHasAdPanels()) return;
+        for (int i = 0; i < EditorSceneManager.sceneCount; i++)
+            if (EditorSceneManager.GetSceneAt(i).isDirty)
+            {
+                Debug.LogWarning("[BeachTennisGO] Save the open scene, then run Tools > Beach Tennis GO > Add Ad Panels.");
+                return;
+            }
+        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var court = Object.FindFirstObjectByType<Court>();
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(AdPanelPrefab);
+        var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(AdSpritePath);
+        if (court == null || prefab == null) return;
+
+        var old = GameObject.Find("AdPanels");
+        if (old != null) Object.DestroyImmediate(old);
+
+        var proto = prefab.GetComponent<AdPanel>();
+        var root = new GameObject("AdPanels");
+        var ring = root.AddComponent<AdPanelRing>();
+        ring.court = court;
+        ring.panelPrefab = proto;
+        ring.width = proto.size.x;
+        ring.height = proto.size.y;
+        ring.SyncPanels();
+        int count = 0;
+        foreach (var run in ring.runs) count += run.panels.Length;
+
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Ad panels added: " + count);
+    }
+
+    const string BallTexturePath = "Assets/Sprites/BallTexture.jpeg";
+
+    // Small WebGL-friendly import for the ball texture (it covers a few pixels on screen).
+    static void ConfigureBallTexture()
+    {
+        var imp = AssetImporter.GetAtPath(BallTexturePath) as TextureImporter;
+        if (imp == null || imp.userData == "btgo-ball-v1") return;
+        imp.textureType = TextureImporterType.Default;
+        imp.mipmapEnabled = true;
+        imp.wrapMode = TextureWrapMode.Repeat;
+        imp.textureCompression = TextureImporterCompression.Compressed;
+        imp.crunchedCompression = true;
+        imp.compressionQuality = 75;
+        imp.maxTextureSize = 512;
+        var web = imp.GetPlatformTextureSettings("WebGL");
+        web.overridden = true;
+        web.maxTextureSize = 512;
+        web.format = TextureImporterFormat.DXT1Crunched;
+        web.compressionQuality = 75;
+        imp.SetPlatformTextureSettings(web);
+        imp.userData = "btgo-ball-v1";
+        imp.SaveAndReimport();
+    }
+
+    // Ball material: texture with the grey panel recoloured by the tint (see BallTint.shader).
+    static void EnsureBallMaterial()
+    {
+        var shader = Shader.Find("BeachTennisGO/BallTint");
+        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(BallTexturePath);
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(MatDir + "/Ball.mat");
+        if (shader == null || tex == null || mat == null || mat.shader == shader) return;
+        ConfigureBallTexture();
+        mat.shader = shader;
+        mat.SetTexture("_MainTex", tex);
+        EditorUtility.SetDirty(mat);
+        AssetDatabase.SaveAssets();
+        Debug.Log("[BeachTennisGO] Ball material now uses BallTint.");
+    }
+
+    const string HudFontPath = "Assets/Fonts/LilitaOne-Regular.ttf";
+
+    // Creates the HUD canvas in the scene (once) and wires it to HudView. After that it is plain scene content
+    // to edit by hand; it is only rebuilt when the "HUD" object or the references are missing.
+    static void EnsureHud()
+    {
+        for (int i = 0; i < EditorSceneManager.sceneCount; i++)
+            if (EditorSceneManager.GetSceneAt(i).isDirty)
+            {
+                Debug.LogWarning("[BeachTennisGO] Save the open scene, then run Tools > Beach Tennis GO > Add HUD Canvas.");
+                return;
+            }
+        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var view = Object.FindFirstObjectByType<HudView>();
+        if (view == null) return;
+        if (view.scoreText != null && view.infoText != null && view.bannerText != null) return;
+
+        var old = GameObject.Find("HUD");
+        if (old != null) Object.DestroyImmediate(old);
+
+        var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+        var canvasGo = new GameObject("HUD", typeof(Canvas), typeof(CanvasScaler));
+        canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+        var scaler = canvasGo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1280f, 720f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 1f; // scale with the height
+
+        // Full-width strips; `top` is the distance from the top edge and `anchorY` the anchor height (0..1).
+        Text MakeText(string name, int size, float anchorY, float top, float height)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(Outline));
+            go.transform.SetParent(canvasGo.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0f, anchorY);
+            rt.anchorMax = new Vector2(1f, anchorY);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, -top);
+            rt.sizeDelta = new Vector2(0f, height);
+            var t = go.GetComponent<Text>();
+            t.font = font;
+            t.fontSize = size;
+            t.alignment = TextAnchor.MiddleCenter;
+            t.color = Color.white;
+            t.raycastTarget = false;
+            t.supportRichText = false;
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            var o = go.GetComponent<Outline>();
+            o.effectColor = new Color(0f, 0f, 0f, 0.7f);
+            o.effectDistance = new Vector2(2f, -2f);
+            return t;
+        }
+
+        view.scoreText = MakeText("Score", 56, 1f, 10f, 70f);
+        view.infoText = MakeText("Info", 24, 1f, 78f, 30f);
+        view.bannerText = MakeText("Banner", 24, 0.62f, 0f, 140f);
+        EditorUtility.SetDirty(view);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] HUD canvas added to the scene.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
+    public static void AddHudCanvas() { EnsureHud(); }
+
+    [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
+    public static void RebuildAdPanels()
+    {
+        ConfigureAdSprite();
+        EnsureAdPrefab();
+        EnsureAdPanelsInScene(true);
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Ad Panels")]
+    public static void AddAdPanels()
+    {
+        ConfigureAdSprite();
+        EnsureAdPrefab();
+        EnsureAdPanelsInScene();
+    }
+
     static bool NeedsSetup()
     {
-        if (!BallHasTrail()) return true;
+        if (!BallHasTrail() || !BallHasLandingMarker()) return true;
+        if (!System.IO.File.Exists(AdPanelPrefab) || !SceneHasAdPanels()) return true;
         foreach (var n in new[] { "Ball", "Court", "Net", "Racket", "PlayerRacket", "AIRacket" })
             if (!System.IO.File.Exists(PrefabDir + "/" + n + ".prefab")) return true;
         return !SceneHasGameManager();
@@ -80,6 +342,10 @@ public static class ProjectSetup
         ConfigurePlayer();
         BuildScene(force);
         EnsureBallTrail();
+        EnsureLandingMarker();
+        EnsureBallMaterial();
+        AddAdPanels();
+        EnsureHud();
         AssetDatabase.SaveAssets();
         Debug.Log("[BeachTennisGO] Setup done: prefabs in Assets/Prefabs, scene Assets/Scene/Gameplay.unity");
     }
