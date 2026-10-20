@@ -298,6 +298,102 @@ public static class ProjectSetup
         Debug.Log("[BeachTennisGO] HUD canvas added to the scene.");
     }
 
+    // Creates the fake shadows in the scene (once): a "Shadows" object with the sun settings, one shadow per racket and one for the net.
+    static void EnsureShadows()
+    {
+        var scene = EditorSceneManager.OpenScene(ScenePath);
+        if (Object.FindFirstObjectByType<ShadowSun>() != null) return;
+        var net = Object.FindFirstObjectByType<Net>();
+        var player = Object.FindFirstObjectByType<PlayerRacketController>();
+        var ai = Object.FindFirstObjectByType<AiRacketController>();
+        if (net == null || player == null || ai == null) return;
+
+        Material ShadowMat(string name, float shape)
+        {
+            string path = "Assets/Materials/" + name + ".mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { m = new Material(Shader.Find("BeachTennisGO/FakeShadow")); AssetDatabase.CreateAsset(m, path); }
+            m.SetFloat("_Shape", shape);
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+        var racketMat = ShadowMat("RacketShadow", 0f);
+        var netMat = ShadowMat("NetShadow", 1f);
+
+        var root = new GameObject("Shadows");
+        var sun = root.AddComponent<ShadowSun>();
+        var court = Object.FindFirstObjectByType<Court>();
+
+        T Make<T>(string name, Material mat) where T : MonoBehaviour
+        {
+            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(root.transform, false);
+            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            return go.AddComponent<T>();
+        }
+        var ps = Make<RacketShadow>("PlayerRacketShadow", racketMat); ps.racket = player.Racket; ps.sun = sun; ps.court = court;
+        var cs = Make<RacketShadow>("AIRacketShadow", racketMat); cs.racket = ai.Racket; cs.sun = sun; cs.court = court;
+        var ns = Make<NetShadow>("NetShadow", netMat); ns.net = net; ns.sun = sun; ns.court = court;
+
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        AssetDatabase.SaveAssets();
+        Debug.Log("[BeachTennisGO] Fake shadows added to the scene.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Fake Shadows")]
+    public static void AddFakeShadows() { EnsureShadows(); }
+
+    const string AudioFolder = "Assets/Audio";
+
+    // Wires the racket hit and sand landing sounds into the scene's GameManager (an AudioSource on the same object); idempotent.
+    static void EnsureAudio()
+    {
+        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (gm == null) return;
+
+        AudioClip[] Load(string prefix)
+        {
+            var list = new System.Collections.Generic.List<AudioClip>();
+            foreach (var guid in AssetDatabase.FindAssets(prefix + " t:AudioClip", new[] { AudioFolder }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!System.IO.Path.GetFileName(path).StartsWith(prefix)) continue;
+                var importer = AssetImporter.GetAtPath(path) as AudioImporter;
+                if (importer != null)
+                {
+                    importer.forceToMono = true;
+                    importer.loadInBackground = false;
+                    var s = importer.defaultSampleSettings;
+                    s.loadType = AudioClipLoadType.DecompressOnLoad; // tiny clips: no latency on the first play
+                    s.compressionFormat = AudioCompressionFormat.Vorbis;
+                    s.quality = 0.6f;
+                    importer.defaultSampleSettings = s;
+                    importer.SaveAndReimport();
+                }
+                list.Add(AssetDatabase.LoadAssetAtPath<AudioClip>(path));
+            }
+            list.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            return list.ToArray();
+        }
+
+        var src = gm.GetComponent<AudioSource>();
+        if (src == null) src = gm.gameObject.AddComponent<AudioSource>();
+        src.playOnAwake = false;
+        src.spatialBlend = 0f;
+        gm.sfx = src;
+        gm.racketHits = Load("RacketHit");
+        gm.sandLandings = Load("SandLand");
+        EditorUtility.SetDirty(gm);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Racket hit + sand landing sounds wired to the GameManager (" + gm.racketHits.Length + " / " + gm.sandLandings.Length + " clips).");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Game Sounds")]
+    public static void AddGameSounds() { EnsureAudio(); }
+
     const string BallIconPath = "Assets/Sprites/ball2D.png";
 
     // Creates the "LandingAlert" object under the HUD canvas (once): blinking ball icon + red arrow shown when the landing marker is off screen.
@@ -405,6 +501,8 @@ public static class ProjectSetup
         AddAdPanels();
         EnsureHud();
         EnsureLandingAlert();
+        EnsureAudio();
+        EnsureShadows();
         AssetDatabase.SaveAssets();
         Debug.Log("[BeachTennisGO] Setup done: prefabs in Assets/Prefabs, scene Assets/Scene/Gameplay.unity");
     }

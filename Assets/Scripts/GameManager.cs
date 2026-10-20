@@ -15,6 +15,19 @@ public class GameManager : MonoBehaviour
     public CameraRig cameraRig;
     public HudView hud;
 
+    [Header("Audio")]
+    [Tooltip("Plays the sound effects (an AudioSource on this object).")]
+    public AudioSource sfx;
+    [Tooltip("Racket touches; one is picked at random on every hit (never the same twice in a row).")]
+    public AudioClip[] racketHits;
+    [Range(0f, 1f)] public float hitVolume = 0.8f;
+    [Tooltip("Random pitch variation so repeated hits do not sound identical (+/-).")]
+    [Range(0f, 0.3f)] public float hitPitchVariance = 0.08f;
+    [Tooltip("Ball landing on the sand; random variation like the racket hits.")]
+    public AudioClip[] sandLandings;
+    [Range(0f, 1f)] public float landVolume = 0.7f;
+    [Range(0f, 0.3f)] public float landPitchVariance = 0.1f;
+
     [Header("Match rules")]
     public int pointsToWin = 11;
     public int winBy = 2;
@@ -214,8 +227,10 @@ public class GameManager : MonoBehaviour
     void StepBall(bool rules)
     {
         Vector3 prev;
+        float fall = Mathf.Max(0f, -ball.Velocity.y - ball.gravity * physicsStep * ballSpeed); // vertical speed on impact
         bool landed = ball.Step(physicsStep * ballSpeed, court, net, out prev);
         rallyTime += physicsStep;
+        if (landed) PlayLanding(fall);
         if (!rules) return;
 
         if (landed) { ResolveLanding(); return; }
@@ -237,6 +252,7 @@ public class GameManager : MonoBehaviour
     {
         ball.Velocity = ctrl.ComputeShot(this, ball.Position);
         lastHitter = side;
+        PlayHit(ball.Velocity.magnitude);
         if (state == State.Serving)
         {
             rallyTime = 0f;
@@ -245,6 +261,44 @@ public class GameManager : MonoBehaviour
             EnterState(State.Rally);
         }
         if (side == 0) ai.OnOpponentHit(this);
+    }
+
+    int lastHitClip = -1, lastLandClip = -1;
+
+    // Random clip that differs from the previous pick (returns -1 for an empty array).
+    static int Pick(AudioClip[] clips, ref int last)
+    {
+        if (clips == null || clips.Length == 0) return -1;
+        int i = Random.Range(0, clips.Length);
+        if (clips.Length > 1 && i == last) i = (i + 1 + Random.Range(0, clips.Length - 1)) % clips.Length;
+        last = i;
+        return i;
+    }
+
+    void Play(AudioClip clip, float volume, float pitch)
+    {
+        sfx.pitch = pitch;
+        sfx.PlayOneShot(clip, volume);
+    }
+
+    // Harder hits are louder (and a touch higher pitched).
+    void PlayHit(float speed)
+    {
+        if (sfx == null) return;
+        int i = Pick(racketHits, ref lastHitClip);
+        if (i < 0 || racketHits[i] == null) return;
+        float power = Mathf.Clamp01(speed / 14f);
+        Play(racketHits[i], hitVolume * Mathf.Lerp(0.55f, 1f, power), 1f + Random.Range(-hitPitchVariance, hitPitchVariance) + power * 0.05f);
+    }
+
+    // The ball touching the sand; the impact speed sets the loudness.
+    void PlayLanding(float impactSpeed)
+    {
+        if (sfx == null) return;
+        int i = Pick(sandLandings, ref lastLandClip);
+        if (i < 0 || sandLandings[i] == null) return;
+        float power = Mathf.Clamp01(impactSpeed / 9f);
+        Play(sandLandings[i], landVolume * Mathf.Lerp(0.4f, 1f, power), 1f + Random.Range(-landPitchVariance, landPitchVariance));
     }
 
     // ---------- rules ----------

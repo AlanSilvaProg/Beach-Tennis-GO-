@@ -49,13 +49,10 @@ MonoBehaviour:
   width: 10.2
   thickness: 0.04
   bandHeight: 2.93
-  postSize: 0.12
   bounceBack: 0.25
   sideDamping: 0.5
   band: {fileID: 2662375694836179330}
   modelSize: {x: 1, y: 0.37, z: 0.03}
-  postLeft: {fileID: 0}
-  postRight: {fileID: 0}
 --- !u!1001 &2555812493102761577
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -116,6 +113,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: 86d1ce99f0bda470b8dea7645d50b813, type: 3}
+      propertyPath: m_CastShadows
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: 86d1ce99f0bda470b8dea7645d50b813, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: dc51449f21e954a0696a6d3bd8e5e0ee, type: 2}
     - target: {fileID: 919132149155446097, guid: 86d1ce99f0bda470b8dea7645d50b813, type: 3}
       propertyPath: m_Name
       value: Band
