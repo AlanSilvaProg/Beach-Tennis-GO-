@@ -14,6 +14,7 @@ public class GameManager : MonoBehaviour
     public AiRacketController ai;
     public CameraRig cameraRig;
     public HudView hud;
+    public ShotAnnouncer announcer;
 
     [Header("Audio")]
     [Tooltip("Plays the sound effects (an AudioSource on this object).")]
@@ -34,6 +35,8 @@ public class GameManager : MonoBehaviour
     [Tooltip("Points each player serves in a row (1 once both are near the end).")]
     public int servesPerTurn = 2;
     public int startLevel = 1;
+    [Tooltip("No-Ad: once both players reach this score, the next point wins the match (0 = off).")]
+    public int noAdScore = 15;
 
     [Header("Timing (s)")]
     public float serveDelay = 1.0f;
@@ -71,6 +74,7 @@ public class GameManager : MonoBehaviour
     int playerScore, aiScore;
     int server;
     int lastHitter;
+    int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
     float rallyTime;
     float accumulator;
     bool serveArmed;
@@ -173,7 +177,33 @@ public class GameManager : MonoBehaviour
         ball.SetVisible(true);
         lastHitter = server;
         cameraRig.SetServing(true);
+        hitsInPoint = 0;
         EnterState(State.Serving);
+        AnnouncePointStakes();
+    }
+
+    // Would the next point win the match for this side?
+    bool WinsMatchWithNextPoint(int side)
+    {
+        int a = (side == 0 ? playerScore : aiScore) + 1, b = side == 0 ? aiScore : playerScore;
+        return IsMatchOver(a, b);
+    }
+
+    // Win at pointsToWin with a lead of winBy; once both reach noAdScore, the next point wins (no advantage).
+    bool IsMatchOver(int a, int b)
+    {
+        if (noAdScore > 0 && Mathf.Max(a, b) > noAdScore) return true;
+        return Mathf.Max(a, b) >= pointsToWin && Mathf.Abs(a - b) >= winBy;
+    }
+
+    bool NoAdPoint => noAdScore > 0 && playerScore == noAdScore && aiScore == noAdScore;
+
+    void AnnouncePointStakes()
+    {
+        if (announcer == null) return;
+        bool matchPoint = WinsMatchWithNextPoint(0) || WinsMatchWithNextPoint(1);
+        if (NoAdPoint) { announcer.Say(ShotAnnouncer.Call.NoAd); announcer.SayNext(ShotAnnouncer.Call.MatchPoint); }
+        else if (matchPoint) announcer.Say(ShotAnnouncer.Call.MatchPoint);
     }
 
     bool InReach(Racket r)
@@ -250,9 +280,13 @@ public class GameManager : MonoBehaviour
 
     void Hit(int side, RacketController ctrl)
     {
-        ball.Velocity = ctrl.ComputeShot(this, ball.Position);
+        Vector3 incoming = ball.Velocity, contact = ball.Position;
+        ball.Velocity = ctrl.ComputeShot(this, contact);
         lastHitter = side;
+        hitsInPoint++;
         PlayHit(ball.Velocity.magnitude);
+        if (announcer != null && state != State.Serving)
+            announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? ai.Racket : player.Racket, side, contact, incoming, ball.Velocity);
         if (state == State.Serving)
         {
             rallyTime = 0f;
@@ -307,6 +341,11 @@ public class GameManager : MonoBehaviour
     {
         int landSide = ball.Position.z < 0f ? 0 : 1;
         bool inside = court.Contains(ball.Position);
+        if (announcer != null)
+        {
+            if (inside && landSide != lastHitter && hitsInPoint == 1) announcer.Say(ShotAnnouncer.Call.Ace);   // serve nobody touched
+            else if (!inside) announcer.Say(ShotAnnouncer.Call.Out);
+        }
         Score(inside && landSide != lastHitter ? lastHitter : 1 - lastHitter);
     }
 
@@ -315,7 +354,7 @@ public class GameManager : MonoBehaviour
         if (state != State.Rally) return;
         if (winner == 0) playerScore++; else aiScore++;
         hud.Banner = winner == 0 ? "Point!" : "CPU point";
-        bool over = (playerScore >= pointsToWin || aiScore >= pointsToWin) && Mathf.Abs(playerScore - aiScore) >= winBy;
+        bool over = IsMatchOver(playerScore, aiScore);
         if (over)
         {
             hud.Banner = playerScore > aiScore ? "YOU WIN!\nClick / tap for next level" : "YOU LOSE\nClick / tap to retry";

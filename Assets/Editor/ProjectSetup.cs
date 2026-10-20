@@ -385,6 +385,23 @@ public static class ProjectSetup
         gm.sfx = src;
         gm.racketHits = Load("RacketHit");
         gm.sandLandings = Load("SandLand");
+
+        // Announcer: its own AudioSource (so a call can be cut off without touching the sound effects) and the voice lines.
+        var announcer = Object.FindFirstObjectByType<ShotAnnouncer>();
+        if (announcer == null)
+        {
+            var go = new GameObject("Announcer", typeof(AudioSource), typeof(ShotAnnouncer));
+            announcer = go.GetComponent<ShotAnnouncer>();
+            announcer.voice = go.GetComponent<AudioSource>();
+            announcer.voice.playOnAwake = false;
+            announcer.voice.spatialBlend = 0f;
+        }
+        var calls = (ShotAnnouncer.Call[])System.Enum.GetValues(typeof(ShotAnnouncer.Call));
+        announcer.lines = new ShotAnnouncer.Line[calls.Length];
+        for (int i = 0; i < calls.Length; i++)
+            announcer.lines[i] = new ShotAnnouncer.Line { call = calls[i], clips = Load("Voice_" + calls[i] + "_") };
+        EditorUtility.SetDirty(announcer);
+        gm.announcer = announcer;
         EditorUtility.SetDirty(gm);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
