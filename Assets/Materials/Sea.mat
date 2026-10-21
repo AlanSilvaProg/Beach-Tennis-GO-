@@ -25,10 +25,10 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _FadeLength: 70
-    - _FadeStart: 35
-    - _ShoreZ: 17
-    - _WaveSpeed: 0.3
+    - _FadeLength: 73.7
+    - _FadeStart: 26.1
+    - _ShoreZ: 26.4
+    - _WaveSpeed: 1
     m_Colors:
     - _DeepColor: {r: 0.04, g: 0.38, b: 0.72, a: 1}
     - _FoamColor: {r: 1, g: 1, b: 1, a: 1}

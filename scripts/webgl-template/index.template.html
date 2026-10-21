@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0b4a86">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <link rel="icon" id="favicon" type="image/webp">
+    <style>
+      /* Everything the loading screen needs is inline (logo, blurred background), so it shows before any other file is downloaded. */
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b4a86; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+      #unity-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #0b4a86; outline: none; }
+
+      #loading { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; transition: opacity .45s ease; }
+      #loading.done { opacity: 0; pointer-events: none; }
+      /* Full-screen background: the thumbnail, tiny and stretched, then blurred. The negative inset hides the blurred edges. */
+      #loading-bg { position: absolute; inset: -8%; background: #0b4a86 url(data:image/jpeg;base64,%%THUMB_DATA%%) center / cover no-repeat; filter: blur(16px) saturate(1.15) brightness(.9); }
+      #loading-shade { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(0,20,50,.05) 0%, rgba(0,20,50,.45) 100%); }
+      #loading-logo { position: relative; width: min(72vw, 46vh, 420px); height: auto; aspect-ratio: %%LOGO_W%% / %%LOGO_H%%; filter: drop-shadow(0 6px 16px rgba(0,0,0,.35)); animation: float 3.2s ease-in-out infinite; }
+      #loading-bar { position: relative; margin-top: min(4vh, 28px); width: min(64vw, 360px); height: 16px; border-radius: 10px; background: rgba(0,20,50,.45); box-shadow: inset 0 0 0 2px rgba(255,255,255,.6), 0 4px 12px rgba(0,0,0,.25); overflow: hidden; }
+      #loading-fill { height: 100%; width: 0%; border-radius: 10px; background: linear-gradient(180deg, #ffe066 0%, #ffb300 55%, #ff7a00 100%); box-shadow: 0 0 10px rgba(255,179,0,.8); transition: width .25s ease-out; }
+      #loading-error { position: relative; margin-top: 14px; padding: 0 16px; max-width: 80vw; color: #fff; font: 14px/1.3 sans-serif; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.6); display: none; }
+      @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+      @media (prefers-reduced-motion: reduce) { #loading-logo { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="loading">
+      <div id="loading-bg"></div>
+      <div id="loading-shade"></div>
+      <img id="loading-logo" alt="{{{ PRODUCT_NAME }}}" width="%%LOGO_W%%" height="%%LOGO_H%%" src="data:image/webp;base64,%%LOGO_DATA%%">
+      <div id="loading-bar"><div id="loading-fill"></div></div>
+      <div id="loading-error"></div>
+    </div>
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+      var loading = document.querySelector("#loading");
+      var fill = document.querySelector("#loading-fill");
+      document.querySelector("#favicon").href = document.querySelector("#loading-logo").src; // same inline image, not a second copy
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+        workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: function (msg, type) { if (type == 'error') showError(msg); },
+      };
+
+      function showError(message) {
+        var box = document.querySelector("#loading-error");
+        box.textContent = message;
+        box.style.display = "block";
+        loading.classList.remove("done");
+      }
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          fill.style.width = (100 * progress) + "%";   // 0..1 while the data, framework and code are downloaded and started
+        }).then(function () {
+          fill.style.width = "100%";
+          loading.classList.add("done");
+          setTimeout(function () { loading.style.display = "none"; }, 500);
+        }).catch(function (message) {
+          showError(message);
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>
