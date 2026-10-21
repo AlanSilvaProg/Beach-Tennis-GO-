@@ -4,8 +4,7 @@ using UnityEngine;
 //  - Distance: `distanceFactor` x the distance at which the whole court fits (below 1 = closer, rackets look bigger),
 //    adjusted for the real screen shape: very wide screens zoom in a little, narrow ones (phones in portrait) back off a little.
 //  - Centre of the view: `lookAt`.
-//  - Sideways: slides with the player's racket (`followX`), up to `maxPan` metres. On a narrow screen (phone in portrait) it follows
-//    harder and faster (`portrait*` values), because little of the court width fits on the screen.
+//  - Sideways: slides with the player's racket (`followX`), up to `maxPan` metres.
 //  - Pull-back: if the racket would leave the screen (e.g. going back for the serve), the camera backs off just
 //    enough to keep it visible, but never further than `maxPullback` x the base distance.
 //
@@ -54,18 +53,6 @@ public class CameraRig : MonoBehaviour
     [Range(0f, 1f)] public float followX = 0.6f;
     [Tooltip("Furthest the camera slides sideways from the centre (m).")]
     public float maxPan = 2f;
-
-    [Header("Portrait (narrow screens, e.g. phones)")]
-    [Tooltip("Screen shape (width / height) at or below which the portrait values apply completely.")]
-    public float portraitAspect = 0.75f;
-    [Tooltip("Screen shape at or above which the normal values apply; in between the two are blended.")]
-    public float landscapeAspect = 1.2f;
-    [Tooltip("Sideways follow in portrait (1 = locked to the racket).")]
-    [Range(0f, 1.5f)] public float portraitFollowX = 1f;
-    [Tooltip("Furthest the camera slides sideways in portrait (m).")]
-    public float portraitMaxPan = 4f;
-    [Tooltip("Camera catch-up time in portrait (s); lower = more responsive.")]
-    [Min(0.01f)] public float portraitMoveSmoothTime = 0.1f;
 
     [Header("Keep the racket in view")]
     [Tooltip("Screen border (fraction) the racket must stay inside; the camera backs off to respect it.")]
@@ -133,14 +120,7 @@ public class CameraRig : MonoBehaviour
         if (!Application.isPlaying) { Snap(); return; }
         if (Mathf.Abs(cam.aspect - lastAspect) > 0.001f) Refit(); // the window was resized / the phone turned
         transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
-        transform.position = Vector3.SmoothDamp(transform.position, Target(), ref velocity, Mathf.Lerp(moveSmoothTime, portraitMoveSmoothTime, PortraitBlend()));
-    }
-
-    // 0 on a landscape screen, 1 on a portrait one (by the real screen shape, so it also follows a window that is resized).
-    float PortraitBlend()
-    {
-        if (cam == null) return 0f;
-        return Mathf.InverseLerp(landscapeAspect, Mathf.Min(portraitAspect, landscapeAspect - 0.01f), cam.aspect);
+        transform.position = Vector3.SmoothDamp(transform.position, Target(), ref velocity, moveSmoothTime);
     }
 
     float BaseDistance => Mathf.Max(minDistance, fitDistance * distanceFactor * aspectFactor);
@@ -149,12 +129,7 @@ public class CameraRig : MonoBehaviour
     Vector3 Target()
     {
         float pan = 0f;
-        if (playerRacket != null)
-        {
-            float t = PortraitBlend();
-            float follow = Mathf.Lerp(followX, portraitFollowX, t), limit = Mathf.Lerp(maxPan, portraitMaxPan, t);
-            pan = Mathf.Clamp(playerRacket.Position.x * follow, -limit, limit);
-        }
+        if (playerRacket != null) pan = Mathf.Clamp(playerRacket.Position.x * followX, -maxPan, maxPan);
         Vector3 centre = lookAt + new Vector3(pan, 0f, 0f);
 
         bool serve = Application.isPlaying ? serving : previewServing;
