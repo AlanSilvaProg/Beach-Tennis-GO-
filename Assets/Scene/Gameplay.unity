@@ -351,19 +351,15 @@ MonoBehaviour:
   cameraRig: {fileID: 1347760171}
   hud: {fileID: 64010825}
   announcer: {fileID: 937326119}
+  language: 0
   sfx: {fileID: 64010828}
-  racketHits:
-  - {fileID: 8300000, guid: 0596a9bfb4b7b46c49cb7b437a149ff7, type: 3}
-  - {fileID: 8300000, guid: 95f6b7c07b98b462bb58cde3ac067d98, type: 3}
-  - {fileID: 8300000, guid: d1962bed2a44440f2a37dad0b8c3d30b, type: 3}
-  - {fileID: 8300000, guid: fcdc0155e18e44c9ab41449460371b2d, type: 3}
-  - {fileID: 8300000, guid: 5b712d4185f4f4851b065d95b539c65b, type: 3}
+  playerHit: {fileID: 8300000, guid: 00b139280f2e14d719c2d39ad149174f, type: 3}
+  enemyHit: {fileID: 8300000, guid: e672260ac82f2412b8792471579de5f7, type: 3}
   hitVolume: 0.8
   hitPitchVariance: 0.08
-  sandLandings:
-  - {fileID: 8300000, guid: 53d5a8976472f4349be34e0acac6d60e, type: 3}
-  - {fileID: 8300000, guid: 88b3dc4f274a443e4af6839e482b9f02, type: 3}
-  - {fileID: 8300000, guid: 7e1daa62c9d5d4952964b317783346db, type: 3}
+  sandLanding: {fileID: 8300000, guid: 54f1f8e985e484bafbb896bb0a9758ce, type: 3}
+  crowdEnd: {fileID: 8300000, guid: c1297d49d48544b8680609c6f81ba36b, type: 3}
+  crowdVolume: 0.9
   landVolume: 0.7
   landPitchVariance: 0.1
   pointsToWin: 11
@@ -1869,57 +1865,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShotAnnouncer
   voice: {fileID: 937326120}
-  lines:
-  - call: 0
-    clips:
-    - {fileID: 8300000, guid: 7d224e7468b1249aa955e8fd3549d092, type: 3}
-    - {fileID: 8300000, guid: 550ea33ef0e914eaeb37a718aff519a2, type: 3}
-    - {fileID: 8300000, guid: c1e2c3334a50248c4a6f5f329f85b419, type: 3}
-  - call: 1
-    clips:
-    - {fileID: 8300000, guid: b349f0b8fa23e4fb9b473d5fdccf1867, type: 3}
-    - {fileID: 8300000, guid: 9c7d17de6018c40c5b61be47b39f593c, type: 3}
-    - {fileID: 8300000, guid: 23b928dacf60b42ccad38951b03e60a7, type: 3}
-  - call: 2
-    clips:
-    - {fileID: 8300000, guid: 9b2bff85f426c44eaba72779bd36f22a, type: 3}
-    - {fileID: 8300000, guid: 16b09c80cb0ca40adb361e5fd159846c, type: 3}
-    - {fileID: 8300000, guid: 4079f1d4a737a47f3b1d253f31fec568, type: 3}
-  - call: 3
-    clips:
-    - {fileID: 8300000, guid: bac557c8f8df245e08f135b85dd15239, type: 3}
-    - {fileID: 8300000, guid: 0cdd5e958be7748898dc970d02536227, type: 3}
-    - {fileID: 8300000, guid: 0c36dfe461ec641b3ad88aa11d02f226, type: 3}
-  - call: 4
-    clips:
-    - {fileID: 8300000, guid: 90461492232904bc5a9b5a1e59cbda60, type: 3}
-    - {fileID: 8300000, guid: 0478f77223bb3482c83b7b1c512d6974, type: 3}
-    - {fileID: 8300000, guid: c9a82c6d6775847f891fee274023ca18, type: 3}
-  - call: 5
-    clips:
-    - {fileID: 8300000, guid: 04c28a9afb6ca4d46bcdfde734523b58, type: 3}
-    - {fileID: 8300000, guid: 9329bb3603f6a4dc89b4bd8d5bcb63e2, type: 3}
-    - {fileID: 8300000, guid: f5586e5933a8b4758aa35ef2da068bec, type: 3}
-  - call: 6
-    clips:
-    - {fileID: 8300000, guid: 8689ad1eddafe4f37a30690fea63ec91, type: 3}
-    - {fileID: 8300000, guid: 1011eed01dedc4a0394bfae9ea627081, type: 3}
-    - {fileID: 8300000, guid: 88a7a79066b1244248d9cac2083130ae, type: 3}
-  - call: 7
-    clips:
-    - {fileID: 8300000, guid: ab410853713e64860a00343a11119a94, type: 3}
-    - {fileID: 8300000, guid: 72996fa2fb068448aa9b014456390779, type: 3}
-    - {fileID: 8300000, guid: 0fd251e0cacbb44ba87ae27cbc2c1c26, type: 3}
-  - call: 8
-    clips:
-    - {fileID: 8300000, guid: e03bc661aeee74137aa6e34745c8a73b, type: 3}
-    - {fileID: 8300000, guid: 094db534905f540f9b026ee8912571e1, type: 3}
-    - {fileID: 8300000, guid: 879f7f800d63540dca068bfebc349320, type: 3}
-  - call: 9
-    clips:
-    - {fileID: 8300000, guid: 9f0084e1b17d9453795911fe2d7d7cfb, type: 3}
-    - {fileID: 8300000, guid: eccc21fa99d104b658c1bdb1393cf849, type: 3}
-    - {fileID: 8300000, guid: a349f91e8e7de487c938af06c1b64dbc, type: 3}
   volume: 1
   shotCallChance: 0.8
   shotCallCooldown: 1.5

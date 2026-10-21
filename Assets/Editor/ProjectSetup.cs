@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
@@ -383,8 +384,10 @@ public static class ProjectSetup
         src.playOnAwake = false;
         src.spatialBlend = 0f;
         gm.sfx = src;
-        gm.racketHits = Load("RacketHit");
-        gm.sandLandings = Load("SandLand");
+        gm.playerHit = Load("player-hit").FirstOrDefault();
+        gm.enemyHit = Load("enemy-hit").FirstOrDefault();
+        gm.crowdEnd = Load("crowd-end-game").FirstOrDefault();
+        gm.sandLanding = Load("SandLand").FirstOrDefault();
 
         // Announcer: its own AudioSource (so a call can be cut off without touching the sound effects) and the voice lines.
         var announcer = Object.FindFirstObjectByType<ShotAnnouncer>();
@@ -396,16 +399,14 @@ public static class ProjectSetup
             announcer.voice.playOnAwake = false;
             announcer.voice.spatialBlend = 0f;
         }
-        var calls = (ShotAnnouncer.Call[])System.Enum.GetValues(typeof(ShotAnnouncer.Call));
-        announcer.lines = new ShotAnnouncer.Line[calls.Length];
-        for (int i = 0; i < calls.Length; i++)
-            announcer.lines[i] = new ShotAnnouncer.Line { call = calls[i], clips = Load("Voice_" + calls[i] + "_") };
+        // Voice clips are not assigned here: they are loaded from StreamingAssets/Voice/<language> at runtime (see ShotAnnouncer).
+        VoiceManifest.Generate();
         EditorUtility.SetDirty(announcer);
         gm.announcer = announcer;
         EditorUtility.SetDirty(gm);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
-        Debug.Log("[BeachTennisGO] Racket hit + sand landing sounds wired to the GameManager (" + gm.racketHits.Length + " / " + gm.sandLandings.Length + " clips).");
+        Debug.Log("[BeachTennisGO] Player/enemy hit + sand landing sounds wired to the GameManager.");
     }
 
     [MenuItem("Tools/Beach Tennis GO/Add Game Sounds")]

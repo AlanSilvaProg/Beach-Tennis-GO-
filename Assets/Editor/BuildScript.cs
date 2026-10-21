@@ -17,6 +17,8 @@ public static class BuildScript
         string output = Environment.GetEnvironmentVariable("BUILD_OUTPUT");
         if (string.IsNullOrEmpty(output)) output = DefaultOutput;
 
+        VoiceManifest.Generate(); // voice file lists (StreamingAssets/Voice/<lang>/index.txt) must be current
+
         var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
         if (scenes.Length == 0) { Fail("No enabled scenes in Build Settings."); return; }
 

@@ -1,25 +1,22 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 
 // Announcer voice: calls the type of shot after a hit (Smash, Drop shot, Lob, Drive, Acceleration, Block) and the big moments
 // (Out, Ace, No-Ad, Match point). Every call has several clips and one is picked at random (never the same twice in a row).
-// To use the final voice lines, replace the files in Assets/Audio/Voice (Voice_<Call>_<n>.wav) keeping the names, then run
-// Tools > Beach Tennis GO > Add Game Sounds, or drag the clips into the lines below.
+// Voices live in Assets/StreamingAssets/Voice/<en|pt|es>/Voice_<Call>_<n>.wav (or .mp3/.ogg) and are NOT part of the game data:
+// only the player's language (see I18n) is downloaded, at start, so the other languages cost no loading time. Calls the language
+// has no clip for fall back to English. Each folder has an index.txt (written by Tools > Beach Tennis GO > Update Voice Manifests,
+// and automatically on build) listing its files.
 // The numbers below are in the game's own units (ball speed before the "ballSpeed" multiplier): turn on logShots to tune them.
 public class ShotAnnouncer : MonoBehaviour
 {
     public enum Call { Smash, DropShot, Lob, Drive, Acceleration, Block, Out, Ace, NoAd, MatchPoint }
 
-    [System.Serializable]
-    public class Line
-    {
-        public Call call;
-        public AudioClip[] clips;
-    }
-
     [Header("Voice")]
     public AudioSource voice;
-    public Line[] lines;
     [Range(0f, 1f)] public float volume = 1f;
 
     [Header("Shot calls")]
@@ -56,16 +53,74 @@ public class ShotAnnouncer : MonoBehaviour
     public float blockIncomingSpeed = 13f;
     [Range(0.1f, 1f)] public float blockRatio = 0.6f;
 
-    readonly Dictionary<Call, AudioClip[]> clips = new Dictionary<Call, AudioClip[]>();
+    readonly Dictionary<Call, List<AudioClip>> clips = new Dictionary<Call, List<AudioClip>>();
     readonly Dictionary<Call, int> lastPick = new Dictionary<Call, int>();
     readonly Queue<AudioClip> queue = new Queue<AudioClip>();
     float nextShotCall;
 
-    void Awake()
+    bool loading;
+
+    // Called by the GameManager once the language is decided (it is not left to Start, which the editor's fast Play Mode can skip).
+    public void LoadVoices()
     {
-        if (lines != null)
-            foreach (var l in lines)
-                if (l != null && l.clips != null && l.clips.Length > 0) clips[l.call] = l.clips;
+        if (loading) return;
+        loading = true;
+        StartCoroutine(LoadAll());
+    }
+
+    IEnumerator LoadAll()
+    {
+        string code = I18n.Code;
+        yield return LoadLanguage(code, false);
+        if (code != "en") yield return LoadLanguage("en", true); // only what the language is missing
+    }
+
+    // Downloads the clips of one language folder in parallel (one small index.txt, then the audio files).
+    IEnumerator LoadLanguage(string code, bool onlyMissing)
+    {
+        string root = Application.streamingAssetsPath + "/Voice/" + code;
+        string baseUrl = root.Contains("://") ? root : new Uri(root).AbsoluteUri;
+        string[] names;
+        using (var index = UnityWebRequest.Get(baseUrl + "/index.txt"))
+        {
+            yield return index.SendWebRequest();
+            if (index.result != UnityWebRequest.Result.Success) yield break;
+            names = index.downloadHandler.text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        var pending = new List<UnityWebRequest>();
+        var calls = new List<Call>();
+        foreach (string raw in names)
+        {
+            string file = raw.Trim();
+            string[] parts = System.IO.Path.GetFileNameWithoutExtension(file).Split('_'); // Voice_<Call>_<n>
+            if (parts.Length < 3 || !Enum.TryParse(parts[1], out Call call)) continue;
+            if (onlyMissing && clips.ContainsKey(call)) continue;
+            var req = UnityWebRequestMultimedia.GetAudioClip(baseUrl + "/" + file, TypeOf(file));
+            req.SendWebRequest();
+            pending.Add(req);
+            calls.Add(call);
+        }
+        for (int i = 0; i < pending.Count; i++)
+        {
+            while (!pending[i].isDone) yield return null;
+            if (pending[i].result == UnityWebRequest.Result.Success)
+            {
+                var clip = DownloadHandlerAudioClip.GetContent(pending[i]);
+                clip.name = System.IO.Path.GetFileNameWithoutExtension(pending[i].url);
+                if (!clips.TryGetValue(calls[i], out var list)) clips[calls[i]] = list = new List<AudioClip>();
+                list.Add(clip);
+            }
+            pending[i].Dispose();
+        }
+    }
+
+    static AudioType TypeOf(string file)
+    {
+        string ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
+        if (ext == ".mp3") return AudioType.MPEG;
+        if (ext == ".ogg") return AudioType.OGGVORBIS;
+        return AudioType.WAV;
     }
 
     void Update()
@@ -75,10 +130,10 @@ public class ShotAnnouncer : MonoBehaviour
 
     AudioClip Pick(Call call)
     {
-        if (!clips.TryGetValue(call, out var list) || list.Length == 0) return null;
+        if (!clips.TryGetValue(call, out var list) || list.Count == 0) return null;
         int last = lastPick.TryGetValue(call, out var l) ? l : -1;
-        int i = Random.Range(0, list.Length);
-        if (list.Length > 1 && i == last) i = (i + 1 + Random.Range(0, list.Length - 1)) % list.Length;
+        int i = UnityEngine.Random.Range(0, list.Count);
+        if (list.Count > 1 && i == last) i = (i + 1 + UnityEngine.Random.Range(0, list.Count - 1)) % list.Count;
         lastPick[call] = i;
         return list[i];
     }
@@ -113,7 +168,7 @@ public class ShotAnnouncer : MonoBehaviour
     {
         if (side == 1 && !callCpuShots) return;
         bool matched = Classify(ball, court, hitter, opponent, contact, incoming, outgoing, out Call call);
-        if (!matched || Time.time < nextShotCall || Random.value > shotCallChance) return;
+        if (!matched || Time.time < nextShotCall || UnityEngine.Random.value > shotCallChance) return;
         nextShotCall = Time.time + shotCallCooldown;
         Say(call);
     }

@@ -16,16 +16,27 @@ public class GameManager : MonoBehaviour
     public HudView hud;
     public ShotAnnouncer announcer;
 
+    public enum LanguageChoice { Auto, English, Portuguese, Spanish }
+
+    [Header("Language")]
+    [Tooltip("Auto = the browser's language (pt, es or en; anything else is English). Pick one here to test; in the browser use ?lang=pt|es|en.")]
+    public LanguageChoice language = LanguageChoice.Auto;
+
     [Header("Audio")]
     [Tooltip("Plays the sound effects (an AudioSource on this object).")]
     public AudioSource sfx;
-    [Tooltip("Racket touches; one is picked at random on every hit (never the same twice in a row).")]
-    public AudioClip[] racketHits;
+    [Tooltip("Every racket hit and serve by the player.")]
+    public AudioClip playerHit;
+    [Tooltip("Every racket hit and serve by the opponent.")]
+    public AudioClip enemyHit;
     [Range(0f, 1f)] public float hitVolume = 0.8f;
     [Tooltip("Random pitch variation so repeated hits do not sound identical (+/-).")]
     [Range(0f, 0.3f)] public float hitPitchVariance = 0.08f;
-    [Tooltip("Ball landing on the sand; random variation like the racket hits.")]
-    public AudioClip[] sandLandings;
+    [Tooltip("The ball touching the sand.")]
+    public AudioClip sandLanding;
+    [Tooltip("Crowd cheering, played every time a match ends (win or lose).")]
+    public AudioClip crowdEnd;
+    [Range(0f, 1f)] public float crowdVolume = 0.9f;
     [Range(0f, 1f)] public float landVolume = 0.7f;
     [Range(0f, 0.3f)] public float landPitchVariance = 0.1f;
 
@@ -74,6 +85,8 @@ public class GameManager : MonoBehaviour
     int playerScore, aiScore;
     int server;
     int lastHitter;
+    int infoLevel = -1;
+    string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
     float rallyTime;
     float accumulator;
@@ -93,6 +106,8 @@ public class GameManager : MonoBehaviour
     void Awake()
     {
         Application.targetFrameRate = targetFrameRate;
+        if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
+        if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
         player.ResetPosition();
@@ -110,12 +125,12 @@ public class GameManager : MonoBehaviour
         {
             case State.Menu:
                 hud.ShowScore = false;
-                hud.Banner = "BEACH TENNIS GO!\nClick / tap to play";
+                hud.Banner = I18n.Tr("BEACH TENNIS GO!\nClick / tap to play");
                 if (Pressed()) StartMatch();
                 break;
             case State.Serving:
-                hud.Banner = server == 0 ? "Your serve\nSwing the racket at the ball" : "CPU serve";
-                if (server == 0) { TryPlayerServe(); if (!serveArmed) hud.Banner += "\n(pull the racket back first)"; }
+                hud.Banner = server == 0 ? I18n.Tr("Your serve\nSwing the racket at the ball") : I18n.Tr("CPU serve");
+                if (server == 0) { TryPlayerServe(); if (!serveArmed) hud.Banner += "\n" + I18n.Tr("(pull the racket back first)"); }
                 else if (stateTimer > serveDelay) TryAiServe();
                 break;
             case State.Rally:
@@ -146,7 +161,8 @@ public class GameManager : MonoBehaviour
     {
         hud.ShowScore = state != State.Menu;
         hud.Score = playerScore + "  -  " + aiScore;
-        hud.Info = "You  vs  CPU   |   Level " + level;
+        if (level != infoLevel) { infoLevel = level; info = I18n.Tr("You  vs  CPU   |   Level {0}", level); }
+        hud.Info = info;
     }
 
     void StartMatch()
@@ -284,7 +300,7 @@ public class GameManager : MonoBehaviour
         ball.Velocity = ctrl.ComputeShot(this, contact);
         lastHitter = side;
         hitsInPoint++;
-        PlayHit(ball.Velocity.magnitude);
+        PlayHit(side, ball.Velocity.magnitude);
         if (announcer != null && state != State.Serving)
             announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? ai.Racket : player.Racket, side, contact, incoming, ball.Velocity);
         if (state == State.Serving)
@@ -297,42 +313,33 @@ public class GameManager : MonoBehaviour
         if (side == 0) ai.OnOpponentHit(this);
     }
 
-    int lastHitClip = -1, lastLandClip = -1;
-
-    // Random clip that differs from the previous pick (returns -1 for an empty array).
-    static int Pick(AudioClip[] clips, ref int last)
-    {
-        if (clips == null || clips.Length == 0) return -1;
-        int i = Random.Range(0, clips.Length);
-        if (clips.Length > 1 && i == last) i = (i + 1 + Random.Range(0, clips.Length - 1)) % clips.Length;
-        last = i;
-        return i;
-    }
-
     void Play(AudioClip clip, float volume, float pitch)
     {
         sfx.pitch = pitch;
         sfx.PlayOneShot(clip, volume);
     }
 
-    // Harder hits are louder (and a touch higher pitched).
-    void PlayHit(float speed)
+    // Harder hits are louder (and a touch higher pitched). The player and the opponent have their own sound.
+    void PlayHit(int side, float speed)
     {
-        if (sfx == null) return;
-        int i = Pick(racketHits, ref lastHitClip);
-        if (i < 0 || racketHits[i] == null) return;
+        var clip = side == 0 ? playerHit : enemyHit;
+        if (sfx == null || clip == null) return;
         float power = Mathf.Clamp01(speed / 14f);
-        Play(racketHits[i], hitVolume * Mathf.Lerp(0.55f, 1f, power), 1f + Random.Range(-hitPitchVariance, hitPitchVariance) + power * 0.05f);
+        Play(clip, hitVolume * Mathf.Lerp(0.55f, 1f, power), 1f + Random.Range(-hitPitchVariance, hitPitchVariance) + power * 0.05f);
+    }
+
+    void PlayCrowd()
+    {
+        if (sfx == null || crowdEnd == null) return;
+        Play(crowdEnd, crowdVolume, 1f);
     }
 
     // The ball touching the sand; the impact speed sets the loudness.
     void PlayLanding(float impactSpeed)
     {
-        if (sfx == null) return;
-        int i = Pick(sandLandings, ref lastLandClip);
-        if (i < 0 || sandLandings[i] == null) return;
+        if (sfx == null || sandLanding == null) return;
         float power = Mathf.Clamp01(impactSpeed / 9f);
-        Play(sandLandings[i], landVolume * Mathf.Lerp(0.4f, 1f, power), 1f + Random.Range(-landPitchVariance, landPitchVariance));
+        Play(sandLanding, landVolume * Mathf.Lerp(0.4f, 1f, power), 1f + Random.Range(-landPitchVariance, landPitchVariance));
     }
 
     // ---------- rules ----------
@@ -353,12 +360,13 @@ public class GameManager : MonoBehaviour
     {
         if (state != State.Rally) return;
         if (winner == 0) playerScore++; else aiScore++;
-        hud.Banner = winner == 0 ? "Point!" : "CPU point";
+        hud.Banner = winner == 0 ? I18n.Tr("Point!") : I18n.Tr("CPU point");
         bool over = IsMatchOver(playerScore, aiScore);
         if (over)
         {
-            hud.Banner = playerScore > aiScore ? "YOU WIN!\nClick / tap for next level" : "YOU LOSE\nClick / tap to retry";
+            hud.Banner = playerScore > aiScore ? I18n.Tr("YOU WIN!\nClick / tap for next level") : I18n.Tr("YOU LOSE\nClick / tap to retry");
             EnterState(State.MatchOver);
+            PlayCrowd();
             return;
         }
         EnterState(State.PointOver);
