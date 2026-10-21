@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read     # o deploy-pages lista os artefatos desta execucao (obrigatorio em repositorio privado)
   pages: write
   id-token: write
 
