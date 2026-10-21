@@ -1,7 +1,8 @@
 using UnityEngine;
 
 // Follows the match from behind the player's baseline. Nothing is scaled: the view is just closer.
-//  - Distance: `distanceFactor` x the distance at which the whole court fits (below 1 = closer, rackets look bigger).
+//  - Distance: `distanceFactor` x the distance at which the whole court fits (below 1 = closer, rackets look bigger),
+//    adjusted for the real screen shape: very wide screens zoom in a little, narrow ones (phones in portrait) back off a little.
 //  - Centre of the view: `lookAt`.
 //  - Sideways: slides with the player's racket (`followX`), up to `maxPan` metres. On a narrow screen (phone in portrait) it follows
 //    harder and faster (`portrait*` values), because little of the court width fits on the screen.
@@ -35,6 +36,18 @@ public class CameraRig : MonoBehaviour
     [Tooltip("Fraction of the screen kept free at the edges for the whole-court distance.")]
     [Range(0f, 0.3f)] public float viewportPadding = 0.02f;
     public float minDistance = 3f;
+
+    [Header("Screen shape (width / height of the real screen)")]
+    [Tooltip("From this shape on the camera starts to zoom in, so a very wide screen does not show a small court in the middle of a lot of sand.")]
+    public float wideStartAspect = 1.9f;
+    [Tooltip("Shape at which the full wide zoom is reached.")]
+    public float wideFullAspect = 2.5f;
+    [Tooltip("Distance multiplier at the full wide shape (below 1 = closer).")]
+    [Range(0.5f, 1f)] public float wideZoom = 0.8f;
+    [Tooltip("On screens narrower than the reference shape the camera backs off to show more of the court width: this is the share of the distance the whole court would need (0 = never, 1 = fit it completely).")]
+    [Range(0f, 1f)] public float narrowStrength = 0.6f;
+    [Tooltip("Furthest the camera may back off for a narrow screen, as a multiple of the normal distance.")]
+    [Range(1f, 2f)] public float narrowMaxFactor = 1.4f;
 
     [Header("Sideways follow")]
     [Tooltip("How much of the racket's sideways position the camera copies (0 = fixed, 1 = locked to the racket).")]
@@ -73,6 +86,8 @@ public class CameraRig : MonoBehaviour
     Camera cam;
     Vector3 velocity;
     float fitDistance;
+    float aspectFactor = 1f;
+    float lastAspect;
     bool serving = true;
     Vector3 dir;
 
@@ -116,6 +131,7 @@ public class CameraRig : MonoBehaviour
     {
         if (court == null) return;
         if (!Application.isPlaying) { Snap(); return; }
+        if (Mathf.Abs(cam.aspect - lastAspect) > 0.001f) Refit(); // the window was resized / the phone turned
         transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
         transform.position = Vector3.SmoothDamp(transform.position, Target(), ref velocity, Mathf.Lerp(moveSmoothTime, portraitMoveSmoothTime, PortraitBlend()));
     }
@@ -127,7 +143,7 @@ public class CameraRig : MonoBehaviour
         return Mathf.InverseLerp(landscapeAspect, Mathf.Min(portraitAspect, landscapeAspect - 0.01f), cam.aspect);
     }
 
-    float BaseDistance => Mathf.Max(minDistance, fitDistance * distanceFactor);
+    float BaseDistance => Mathf.Max(minDistance, fitDistance * distanceFactor * aspectFactor);
 
     // Where the camera wants to be: panned to the racket, then backed off until the racket fits.
     Vector3 Target()
@@ -180,11 +196,9 @@ public class CameraRig : MonoBehaviour
         return true;
     }
 
-    // Distance at which the whole court is visible at the reference screen shape (independent of the real one).
-    void Refit()
+    // Distance at which the whole court is visible at the given screen shape.
+    float FitDistance(float aspect)
     {
-        cam.fieldOfView = fieldOfView;
-        dir = new Vector3(0f, Mathf.Sin(pitch * Mathf.Deg2Rad), -Mathf.Cos(pitch * Mathf.Deg2Rad));
         float hw = court.halfWidth + margin, hl = court.halfLength + margin;
         Vector3[] corners =
         {
@@ -197,11 +211,34 @@ public class CameraRig : MonoBehaviour
             bool ok = true;
             foreach (var c in corners)
             {
-                if (!Project(c, centre + dir * d, referenceAspect, out Vector2 v)
+                if (!Project(c, centre + dir * d, aspect, out Vector2 v)
                     || v.x < viewportPadding || v.x > 1f - viewportPadding || v.y < viewportPadding || v.y > 1f - viewportPadding) { ok = false; break; }
             }
             if (ok) break;
         }
-        fitDistance = d;
+        return d;
+    }
+
+    // The whole-court distance at the reference screen shape (the same position on every screen), then the correction for the real shape.
+    void Refit()
+    {
+        cam.fieldOfView = fieldOfView;
+        dir = new Vector3(0f, Mathf.Sin(pitch * Mathf.Deg2Rad), -Mathf.Cos(pitch * Mathf.Deg2Rad));
+        fitDistance = FitDistance(referenceAspect);
+
+        float aspect = cam.aspect;
+        lastAspect = aspect;
+        float factor = 1f;
+        if (aspect < referenceAspect)
+        {
+            // Narrower than the reference: the whole court would need more distance; take part of that, up to a limit.
+            float ratio = FitDistance(aspect) / fitDistance;
+            factor = Mathf.Min(narrowMaxFactor, 1f + Mathf.Max(0f, ratio - 1f) * narrowStrength);
+        }
+        else if (aspect > wideStartAspect)
+        {
+            factor = Mathf.Lerp(1f, wideZoom, Mathf.InverseLerp(wideStartAspect, Mathf.Max(wideStartAspect + 0.01f, wideFullAspect), aspect));
+        }
+        aspectFactor = factor;
     }
 }
