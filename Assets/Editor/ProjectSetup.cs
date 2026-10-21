@@ -171,7 +171,7 @@ public static class ProjectSetup
                 Debug.LogWarning("[BeachTennisGO] Save the open scene, then run Tools > Beach Tennis GO > Add Ad Panels.");
                 return;
             }
-        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var scene = OpenGameplayScene();
         var court = Object.FindFirstObjectByType<Court>();
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(AdPanelPrefab);
         var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(AdSpritePath);
@@ -247,10 +247,10 @@ public static class ProjectSetup
                 Debug.LogWarning("[BeachTennisGO] Save the open scene, then run Tools > Beach Tennis GO > Add HUD Canvas.");
                 return;
             }
-        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var scene = OpenGameplayScene();
         var view = Object.FindFirstObjectByType<HudView>();
         if (view == null) return;
-        if (view.scoreText != null && view.infoText != null && view.bannerText != null) return;
+        if (view.infoText != null && view.bannerText != null) return;
 
         var old = GameObject.Find("HUD");
         if (old != null) Object.DestroyImmediate(old);
@@ -290,8 +290,7 @@ public static class ProjectSetup
             return t;
         }
 
-        view.scoreText = MakeText("Score", 56, 1f, 10f, 70f);
-        view.infoText = MakeText("Info", 24, 1f, 78f, 30f);
+        view.infoText = MakeText("Info", 24, 1f, 140f, 30f); // below the result board
         view.bannerText = MakeText("Banner", 24, 0.62f, 0f, 140f);
         EditorUtility.SetDirty(view);
         EditorSceneManager.MarkSceneDirty(scene);
@@ -302,7 +301,7 @@ public static class ProjectSetup
     // Creates the fake shadows in the scene (once): a "Shadows" object with the sun settings, one shadow per racket and one for the net.
     static void EnsureShadows()
     {
-        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var scene = OpenGameplayScene();
         if (Object.FindFirstObjectByType<ShadowSun>() != null) return;
         var net = Object.FindFirstObjectByType<Net>();
         var player = Object.FindFirstObjectByType<PlayerRacketController>();
@@ -350,7 +349,7 @@ public static class ProjectSetup
     // Wires the racket hit and sand landing sounds into the scene's GameManager (an AudioSource on the same object); idempotent.
     static void EnsureAudio()
     {
-        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var scene = OpenGameplayScene();
         var gm = Object.FindFirstObjectByType<GameManager>();
         if (gm == null) return;
 
@@ -412,14 +411,204 @@ public static class ProjectSetup
     [MenuItem("Tools/Beach Tennis GO/Add Game Sounds")]
     public static void AddGameSounds() { EnsureAudio(); }
 
+    // The Gameplay scene, without reloading it when it is already open: reopening it from disk would throw away whatever has been
+    // adjusted by hand in the editor and not saved yet.
+    static UnityEngine.SceneManagement.Scene OpenGameplayScene()
+    {
+        var active = EditorSceneManager.GetActiveScene();
+        if (active.path == ScenePath) return active;
+        return EditorSceneManager.OpenScene(ScenePath);
+    }
+
+    // Creates the sea behind the far end of the court in the scene (once): a big flat plane with the procedural Sea shader, lying just above
+    // the sand. The shoreline is at the material's _ShoreZ (world z); the plane starts a little in front of it for the wet sand and the foam.
+    // Move or resize the "Sea" object and change the material by hand afterwards. The camera background should keep the horizon colour.
+    static void EnsureSea()
+    {
+        var scene = OpenGameplayScene();
+        if (GameObject.Find("Sea") != null) return;
+        var shader = Shader.Find("BeachTennisGO/Sea");
+        if (shader == null) { Debug.LogWarning("[BeachTennisGO] Sea shader not found."); return; }
+
+        const string matPath = "Assets/Materials/Sea.mat";
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+        if (mat == null) { mat = new Material(shader); AssetDatabase.CreateAsset(mat, matPath); }
+        var cam = Camera.main;
+        if (cam != null) mat.SetColor("_HorizonColor", cam.backgroundColor);
+        mat.SetFloat("_ShoreZ", 17f);
+        EditorUtility.SetDirty(mat);
+
+        var go = GameObject.CreatePrimitive(PrimitiveType.Plane); // 10 x 10 m at scale 1
+        go.name = "Sea";
+        Object.DestroyImmediate(go.GetComponent<Collider>());
+        go.transform.position = new Vector3(0f, 0.004f, 14.5f + 200f); // starts at z 14.5 (before the shoreline), runs 400 m out
+        go.transform.localScale = new Vector3(60f, 1f, 40f);           // 600 m wide
+        var r = go.GetComponent<MeshRenderer>();
+        r.sharedMaterial = mat;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        r.receiveShadows = false;
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        AssetDatabase.SaveAssets();
+        Debug.Log("[BeachTennisGO] Sea added to the scene.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Sea")]
+    public static void AddSea() { EnsureSea(); }
+
+    const string SandTexturePath = "Assets/Sprites/sand-texture.jpeg";
+
+    // Puts the seamless sand texture on the ground: the big "Sand" slab and the slightly darker court area share one world-space
+    // mapping (shader BeachTennisGO/GroundSand), so the grain lines up between them. Safe to run again.
+    static void EnsureSandTexture()
+    {
+        var importer = AssetImporter.GetAtPath(SandTexturePath) as TextureImporter;
+        if (importer != null)
+        {
+            importer.textureType = TextureImporterType.Default;
+            importer.wrapMode = TextureWrapMode.Repeat;
+            importer.mipmapEnabled = true;
+            importer.filterMode = FilterMode.Trilinear;
+            importer.anisoLevel = 4;
+            importer.npotScale = TextureImporterNPOTScale.ToNearest; // 447 px -> 512 px, so it can be block compressed
+            importer.maxTextureSize = 512;
+            importer.textureCompression = TextureImporterCompression.Compressed;
+            importer.crunchedCompression = true;
+            importer.compressionQuality = 60;
+            importer.SaveAndReimport();
+        }
+        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(SandTexturePath);
+        if (AssetDatabase.LoadAssetAtPath<Texture2D>(SandNormalMap.Output) == null) SandNormalMap.Generate();
+        var normal = AssetDatabase.LoadAssetAtPath<Texture2D>(SandNormalMap.Output);
+        var shader = Shader.Find("BeachTennisGO/GroundSand");
+        if (tex == null || shader == null) { Debug.LogWarning("[BeachTennisGO] Sand texture or GroundSand shader not found."); return; }
+
+        void Apply(string name, Color tint)
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/" + name + ".mat");
+            if (m == null) return;
+            m.shader = shader;
+            m.SetTexture("_MainTex", tex);
+            m.SetTexture("_BumpMap", normal);
+            m.SetColor("_Color", tint);
+            m.SetFloat("_TileSize", 5f);
+            EditorUtility.SetDirty(m);
+        }
+        Apply("Sand", Color.white);
+        Apply("CourtArea", new Color(0.95f, 0.92f, 0.84f)); // the court is a touch darker than the sand around it
+        AssetDatabase.SaveAssets();
+        Debug.Log("[BeachTennisGO] Sand texture and normal map applied to the Sand and CourtArea materials.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Apply Sand Texture")]
+    public static void ApplySandTexture() { EnsureSandTexture(); }
+
+    const string BoardSpritePath = "Assets/Sprites/result-board.png";
+    const string DigitalFontPath = "Assets/Fonts/digital-7 (mono).ttf";
+
+    // Creates the result board in the HUD (once): the board image as the background and one Text per digit placed over its windows
+    // (player points, CPU points, hours / minutes / seconds). Positions are in pixels of the 612 x 408 image, measured from its top-left corner,
+    // and the whole board is scaled from the "ResultBoard" object, so it can be moved and resized by hand afterwards.
+    // A board that still has the older two-digit texts is converted: each is replaced by two single-digit texts that keep its font, size,
+    // colour and centre, so adjustments made by hand are not lost.
+    static void EnsureResultBoard()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        if (view == null || view.infoText == null) return;
+        if (view.board != null && view.playerDigits != null && view.playerDigits.Length == 2 && view.playerDigits[0] != null) return;
+
+        var font = AssetDatabase.LoadAssetAtPath<Font>(DigitalFontPath);
+        var led = new Color(1f, 0.28f, 0.12f);   // red-orange segments
+        var amber = new Color(1f, 0.62f, 0.12f);
+        Transform root;
+        bool fresh = view.board == null;
+        if (fresh)
+        {
+            var importer = AssetImporter.GetAtPath(BoardSpritePath) as TextureImporter;
+            if (importer != null && (importer.textureType != TextureImporterType.Sprite || importer.spriteImportMode != SpriteImportMode.Single))
+            {
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.alphaIsTransparency = true;
+                importer.mipmapEnabled = false;
+                importer.SaveAndReimport();
+            }
+            var canvasTf = view.infoText.canvas.transform;
+            var oldScore = canvasTf.Find("Score"); // the plain text score this board replaces
+            if (oldScore != null) Object.DestroyImmediate(oldScore.gameObject);
+
+            var go = new GameObject("ResultBoard", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(canvasTf, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = new Vector2(612f, 408f);
+            rt.localScale = Vector3.one * 0.45f;
+            rt.anchoredPosition = new Vector2(0f, 19f); // hides the empty margin above the board in the image
+            var img = go.GetComponent<Image>();
+            img.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(BoardSpritePath); img.raycastTarget = false; img.preserveAspect = true;
+            view.board = go;
+            var info = (RectTransform)view.infoText.transform;
+            info.anchoredPosition = new Vector2(info.anchoredPosition.x, -140f); // below the board
+        }
+        root = view.board.transform;
+
+        // Two single-digit texts around a pair centre (cx, cy), in image pixels; `old` (a two-digit text) is replaced if it exists.
+        Text[] Pair(string name, float cx, float cy, float dx, float w, float h, int size, Color color)
+        {
+            var old = root.Find(name);
+            if (old != null)
+            {
+                var ot = old.GetComponent<Text>();
+                var ort = (RectTransform)old;
+                cx = ort.anchoredPosition.x; cy = -ort.anchoredPosition.y; h = ort.sizeDelta.y;
+                if (ot != null) { size = ot.fontSize; color = ot.color; if (ot.font != null) font = ot.font; }
+                Object.DestroyImmediate(old.gameObject);
+            }
+            var pair = new Text[2];
+            for (int i = 0; i < 2; i++)
+            {
+                var go = new GameObject(name + (i == 0 ? "_Tens" : "_Units"), typeof(RectTransform), typeof(Text));
+                go.transform.SetParent(root, false);
+                var r = (RectTransform)go.transform;
+                r.anchorMin = r.anchorMax = new Vector2(0f, 1f);
+                r.pivot = new Vector2(0.5f, 0.5f);
+                r.anchoredPosition = new Vector2(cx + (i == 0 ? -dx : dx), -cy);
+                r.sizeDelta = new Vector2(w, h);
+                var t = go.GetComponent<Text>();
+                t.font = font; t.fontSize = size; t.color = color; t.text = "0";
+                t.alignment = TextAnchor.MiddleCenter;
+                t.raycastTarget = false; t.supportRichText = false;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;
+                pair[i] = t;
+            }
+            return pair;
+        }
+        view.playerDigits = Pair("PlayerScore", 207f, 153f, 30f, 60f, 90f, 120, led);
+        view.npcDigits = Pair("NpcScore", 405f, 153f, 30f, 60f, 90f, 120, led);
+        var hours = Pair("Hours", 208f, 267f, 21f, 42f, 66f, 86, amber);
+        var minutes = Pair("Minutes", 308f, 267f, 21f, 42f, 66f, 86, amber);
+        var seconds = Pair("Seconds", 406f, 267f, 21f, 42f, 66f, 86, amber);
+        view.timeDigits = new[] { hours[0], hours[1], minutes[0], minutes[1], seconds[0], seconds[1] };
+
+        EditorUtility.SetDirty(view);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Result board digits ready (" + (fresh ? "created" : "converted to one Text per digit") + ").");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Result Board")]
+    public static void AddResultBoard() { EnsureResultBoard(); }
+
     const string BallIconPath = "Assets/Sprites/ball2D.png";
 
     // Creates the "LandingAlert" object under the HUD canvas (once): blinking ball icon + red arrow shown when the landing marker is off screen.
     static void EnsureLandingAlert()
     {
-        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var scene = OpenGameplayScene();
         var hud = Object.FindFirstObjectByType<HudView>();
-        if (hud == null || hud.scoreText == null) return;
+        if (hud == null || hud.infoText == null) return;
         if (Object.FindFirstObjectByType<LandingAlert>() != null) return;
 
         var importer = AssetImporter.GetAtPath(BallIconPath) as TextureImporter;
@@ -433,7 +622,7 @@ public static class ProjectSetup
         }
         var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(BallIconPath);
 
-        var canvasTf = hud.scoreText.canvas.transform;
+        var canvasTf = hud.infoText.canvas.transform;
         var root = new GameObject("LandingAlert", typeof(RectTransform), typeof(CanvasGroup), typeof(LandingAlert));
         root.transform.SetParent(canvasTf, false);
         var rootRt = (RectTransform)root.transform;
@@ -471,7 +660,7 @@ public static class ProjectSetup
     public static void AddLandingAlert() { EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); EnsureLandingAlert(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()
@@ -518,7 +707,9 @@ public static class ProjectSetup
         EnsureBallMaterial();
         AddAdPanels();
         EnsureHud();
+        EnsureResultBoard();
         EnsureLandingAlert();
+        EnsureSandTexture();
         EnsureAudio();
         EnsureShadows();
         AssetDatabase.SaveAssets();
@@ -654,7 +845,7 @@ public static class ProjectSetup
         if (force || !PrefabExists("Racket") || !PrefabExists("PlayerRacket") || !PrefabExists("AIRacket")) BuildRacketPrefabs();
         if (!force && SceneHasGameManager()) return;
 
-        var scene = EditorSceneManager.OpenScene(ScenePath);
+        var scene = OpenGameplayScene();
         foreach (var root in scene.GetRootGameObjects())
             if (root.GetComponent<Camera>() == null && root.GetComponent<Light>() == null) Object.DestroyImmediate(root);
 

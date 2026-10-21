@@ -53,7 +53,7 @@ public class GameManager : MonoBehaviour
     public float serveDelay = 1.0f;
     public float pointOverDelay = 1.6f;
     public float matchOverInputDelay = 0.6f;
-    [Tooltip("A rally longer than this is resolved as out.")]
+    [Tooltip("A ball that stays in play this long after the last hit (e.g. stuck) is resolved as out.")]
     public float rallyTimeout = 20f;
 
     [Header("Serve")]
@@ -85,6 +85,7 @@ public class GameManager : MonoBehaviour
     int playerScore, aiScore;
     int server;
     int lastHitter;
+    float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
     string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
@@ -118,6 +119,7 @@ public class GameManager : MonoBehaviour
     void Update()
     {
         stateTimer += Time.deltaTime;
+        if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
         player.Tick(this);
         ai.Tick(this);
 
@@ -159,8 +161,9 @@ public class GameManager : MonoBehaviour
 
     void UpdateHud()
     {
-        hud.ShowScore = state != State.Menu;
-        hud.Score = playerScore + "  -  " + aiScore;
+        hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
+        hud.SetScore(playerScore, aiScore);
+        hud.SetTime(matchTime);
         if (level != infoLevel) { infoLevel = level; info = I18n.Tr("You  vs  CPU   |   Level {0}", level); }
         hud.Info = info;
     }
@@ -168,6 +171,7 @@ public class GameManager : MonoBehaviour
     void StartMatch()
     {
         playerScore = aiScore = 0;
+        matchTime = 0f;
         server = 0;
         ai.SetLevel(level);
         player.ResetPosition();
@@ -300,12 +304,12 @@ public class GameManager : MonoBehaviour
         ball.Velocity = ctrl.ComputeShot(this, contact);
         lastHitter = side;
         hitsInPoint++;
+        rallyTime = 0f; // the timeout counts from the last hit, not from the serve (a long rally is not a stuck ball)
         PlayHit(side, ball.Velocity.magnitude);
         if (announcer != null && state != State.Serving)
             announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? ai.Racket : player.Racket, side, contact, incoming, ball.Velocity);
         if (state == State.Serving)
         {
-            rallyTime = 0f;
             accumulator = 0f;
             cameraRig.SetServing(false);
             EnterState(State.Rally);
