@@ -44,16 +44,40 @@ public class PlayerRacketController : RacketController
     [Tooltip("Aimed shots land at least this far inside the lines.")]
     public float landMargin = 0.5f;
 
+    bool sawTouch;          // once a touch has been seen the mouse is ignored (a phone also reports an emulated mouse)
+    bool havePointer;       // false until the pointer has been read since the last time it was lost
+    Vector2 lastPointer;
+
     public override void ResetPosition()
     {
+        havePointer = false;
         Racket.MoveTo(restPosition);
     }
 
     public override void Tick(GameManager gm)
     {
         if (cam == null) cam = Camera.main;
-        Vector3 pointer = Input.mousePosition;
-        if (Input.touchCount > 0) pointer = Input.GetTouch(0).position;
+        Vector3 pointer;
+        if (Input.touchCount > 0)
+        {
+            sawTouch = true;
+            pointer = Input.GetTouch(0).position;
+        }
+        else if (sawTouch || Application.isMobilePlatform)
+        {
+            // Touch screen with no finger on it: the racket stays where it is. (Without this it would follow the emulated mouse,
+            // which sits at the screen corner when the game starts and at the last touch after the finger is lifted.)
+            havePointer = false;
+            return;
+        }
+        else pointer = Input.mousePosition;
+
+        // Pointer that has not moved (finger resting, mouse untouched): keep the racket where it is. The camera slides with the racket,
+        // so mapping the same screen point again would drag the racket along with it and it would drift on its own.
+        if (havePointer && ((Vector2)pointer - lastPointer).sqrMagnitude < 1f) return;
+        lastPointer = pointer;
+        havePointer = true;
+
         pointer.x = Mathf.Clamp(pointer.x, 0f, Screen.width);
         pointer.y = Mathf.Clamp(pointer.y + pointerLift * Screen.height, 0f, Screen.height);
         Ray ray = cam.ScreenPointToRay(pointer);
