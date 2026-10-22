@@ -52,6 +52,7 @@ public class PlayerRacketController : RacketController
     {
         havePointer = false;
         Racket.MoveTo(restPosition);
+        Racket.SnapSweep();
     }
 
     public override void Tick(GameManager gm)
@@ -101,7 +102,7 @@ public class PlayerRacketController : RacketController
         float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
         float speedScore = forwardSpeed * forwardWeight + Mathf.Abs(sideSpeed) * sideWeight;
         float power = Mathf.Clamp01(speedScore / maxSwipeSpeed);
-        float dx = contact.x - Racket.Position.x;
+        float dx = contact.x - Racket.HitCenter.x; // off-centre hit, measured where the racket met the ball
 
         Court court = gm.Court;
         float maxX = court.halfWidth - landMargin;

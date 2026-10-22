@@ -103,6 +103,7 @@ public class AiRacketController : RacketController
     public override void ResetPosition()
     {
         Racket.MoveTo(restPosition);
+        Racket.SnapSweep();
     }
 
     public void DelayReaction(float seconds) { reactTimer = seconds; }

@@ -232,11 +232,23 @@ public class GameManager : MonoBehaviour
         else if (matchPoint) announcer.Say(ShotAnnouncer.Call.MatchPoint);
     }
 
+    // The point of the racket's path this frame (previous position -> current position) that is closest to the ball, on the ground plane.
+    // Checking the whole path instead of only the final position means a very fast swipe cannot skip over the ball between two frames.
+    Vector3 SweptCentre(Racket r, Vector3 ballPos)
+    {
+        Vector3 a = r.PreviousPosition, b = r.Position;
+        float abx = b.x - a.x, abz = b.z - a.z, len2 = abx * abx + abz * abz;
+        float t = len2 > 1e-8f ? Mathf.Clamp01(((ballPos.x - a.x) * abx + (ballPos.z - a.z) * abz) / len2) : 1f;
+        return new Vector3(a.x + abx * t, b.y, a.z + abz * t);
+    }
+
     bool InReach(Racket r)
     {
-        Vector3 p = ball.Position, c = r.Position;
+        Vector3 p = ball.Position;
+        if (p.y > r.MaxHitY) return false; // balls above the vertical reach fly over
+        Vector3 c = SweptCentre(r, p);
         float dx = p.x - c.x, dz = p.z - c.z;
-        return dx * dx + dz * dz <= r.hitRadius * r.hitRadius && p.y <= r.MaxHitY; // balls above the vertical reach fly over
+        return dx * dx + dz * dz <= r.hitRadius * r.hitRadius;
     }
 
     // The ball follows the racket sideways. It only accepts a hit after the racket has been pulled back behind it,
@@ -307,6 +319,7 @@ public class GameManager : MonoBehaviour
     void Hit(int side, RacketController ctrl)
     {
         Vector3 incoming = ball.Velocity, contact = ball.Position;
+        ctrl.Racket.HitCenter = SweptCentre(ctrl.Racket, contact); // where on its path the racket met the ball
         ball.Velocity = ctrl.ComputeShot(this, contact);
         lastHitter = side;
         hitsInPoint++;

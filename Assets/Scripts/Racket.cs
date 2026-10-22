@@ -49,6 +49,11 @@ public class Racket : MonoBehaviour
 
     public Vector3 Velocity { get; private set; }
     public Vector3 Position => transform.position;
+    // Where the racket was at the end of the previous frame. PreviousPosition -> Position is the path swept this frame, so a very fast
+    // swipe cannot jump over the ball between two frames.
+    public Vector3 PreviousPosition => lastPos;
+    // The point of that path where the racket met the ball (set by the GameManager just before the shot is computed).
+    public Vector3 HitCenter { get; set; }
     // Highest ball height (world y) the racket can still hit.
     public float MaxHitY => height + hitHeight;
     // -1 for the player side (z < 0), +1 for the opponent side (z > 0).
@@ -124,6 +129,14 @@ public class Racket : MonoBehaviour
     public void MoveTo(Vector3 p)
     {
         transform.position = Clamp(p);
+    }
+
+    // Forget the path of this frame: used when the racket is put somewhere on purpose (start of a point), so the jump is neither a
+    // swept hit nor a huge swing speed.
+    public void SnapSweep()
+    {
+        lastPos = transform.position;
+        HitCenter = transform.position;
     }
 
     void LateUpdate()
