@@ -11,6 +11,10 @@ using UnityEngine;
 // The object must be named "PokiService": the page calls back with SendMessage("PokiService", ...).
 public class PokiService : MonoBehaviour
 {
+    // Poki id of this game. The HTML5 SDK calls used today (init, loading, gameplay, commercialBreak) do not take it; it is the key for
+    // Poki's per-game services (AUDS user data / leaderboard) if they are added later.
+    public const string GameId = "761a602c-88ba-435a-8df8-d5fdbe420364";
+
     public static bool AdPlaying { get; private set; }
 
     [Tooltip("Safety net for a break that never reports back (s, real time).")]

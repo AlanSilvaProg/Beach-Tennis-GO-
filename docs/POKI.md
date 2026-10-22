@@ -1,5 +1,8 @@
 # Poki SDK — Beach Tennis GO!
 
+- **Game ID:** `761a602c-88ba-435a-8df8-d5fdbe420364` (`PokiService.GameId`). O SDK HTML5 não pede o id em nenhuma chamada usada aqui (`PokiSDK.init()` não recebe parâmetros e a URL do script não tem id); ele serve para os serviços por jogo da Poki, como o AUDS (dados do jogador / ranking), se forem adicionados depois.
+- **Teste oficial:** suba a build no Poki Inspector (https://inspector.poki.dev/) e depois peça a revisão.
+
 Só os requisitos obrigatórios de SDK por enquanto (loading, gameplay start/stop, commercial break). Sem rewarded, contas, ranking nem save na nuvem.
 
 ## Onde está
