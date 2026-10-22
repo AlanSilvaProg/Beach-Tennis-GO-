@@ -8,6 +8,8 @@ public class HudView : MonoBehaviour
 {
     [Header("Result board (one Text per digit; the board image has the dim digits and the colons)")]
     public GameObject board;
+    [Tooltip("Hangs the board from two chains and animates it in and out through the top of the screen. When empty the board is switched on / off.")]
+    public HangingSign scoreboardSign;
     [Tooltip("Player points: tens, units.")]
     public Text[] playerDigits = new Text[2];
     [Tooltip("CPU points: tens, units.")]
@@ -23,6 +25,14 @@ public class HudView : MonoBehaviour
     public Text retryLabel;
     public event System.Action RestartClicked;
     public event System.Action RetryClicked;
+
+    [Header("Win title (big two-line text shown when the match is won)")]
+    public GameObject winTitle;
+    public Text winLine1;     // white
+    public Text winLine2;     // yellow
+    public Text winHint;      // "click / tap for next level", part of the same centred group
+    [Tooltip("Seconds of the pop-in animation.")]
+    public float winPopTime = 0.45f;
 
     [Header("Text")]
     public Text infoText;
@@ -100,6 +110,31 @@ public class HudView : MonoBehaviour
         Apply(retryLabel, retry);
     }
 
+    float winShownAt = -10f;
+
+    // The big "YOU WON" title: pops in (with a small overshoot) when it appears.
+    public void SetWinTitle(bool visible)
+    {
+        if (winTitle == null || winTitle.activeSelf == visible) return;
+        winTitle.SetActive(visible);
+        if (visible) { winShownAt = Time.unscaledTime; winTitle.transform.localScale = Vector3.zero; }
+    }
+
+    public void SetWinLabels(string line1, string line2, string hint)
+    {
+        Apply(winLine1, line1);
+        Apply(winLine2, line2);
+        Apply(winHint, hint);
+    }
+
+    void Update()
+    {
+        if (winTitle == null || !winTitle.activeSelf) return;
+        float k = Mathf.Clamp01((Time.unscaledTime - winShownAt) / Mathf.Max(0.05f, winPopTime));
+        float back = 1f + 2.2f * Mathf.Pow(k - 1f, 3f) + 1.2f * Mathf.Pow(k - 1f, 2f); // ease-out-back: overshoots a little, then settles
+        winTitle.transform.localScale = Vector3.one * back;
+    }
+
     public string Info
     {
         get => info;
@@ -114,7 +149,8 @@ public class HudView : MonoBehaviour
 
     void SetScoreVisible(bool visible)
     {
-        if (board != null) board.SetActive(visible);
+        if (scoreboardSign != null) scoreboardSign.Show(visible);
+        else if (board != null) board.SetActive(visible);
         if (infoText != null) infoText.enabled = visible;
     }
 

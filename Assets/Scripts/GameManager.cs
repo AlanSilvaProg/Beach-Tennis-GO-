@@ -17,6 +17,10 @@ public class GameManager : MonoBehaviour
     public ShotAnnouncer announcer;
     [Tooltip("Poki SDK events (gameplay start/stop and the ad break between matches). Optional.")]
     public PokiService poki;
+    [Tooltip("Main menu (game mode button and selection window), shown while no match is on.")]
+    public GameModeMenu menu;
+    [Tooltip("Confetti burst played behind the win title (a ParticleSystem in front of the camera).")]
+    public ParticleSystem confetti;
 
     public enum LanguageChoice { Auto, English, Portuguese, Spanish }
 
@@ -89,7 +93,7 @@ public class GameManager : MonoBehaviour
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
-    bool loseLabelsSet;
+    bool loseLabelsSet, winLabelsSet;
     float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
@@ -112,6 +116,7 @@ public class GameManager : MonoBehaviour
     {
         Application.targetFrameRate = targetFrameRate;
         if (poki == null) poki = FindFirstObjectByType<PokiService>();
+        if (menu == null) menu = FindFirstObjectByType<GameModeMenu>();
         if (hud != null)
         {
             hud.RestartClicked -= OnRestartClicked; hud.RestartClicked += OnRestartClicked; // -= first: never subscribe twice
@@ -130,9 +135,10 @@ public class GameManager : MonoBehaviour
     {
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
-        // The racket does not move while an ad plays, nor on the lose screen (touches there are for the buttons).
-        bool loseScreen = state == State.MatchOver && aiScore > playerScore;
-        if (!PokiService.AdPlaying && !loseScreen) player.Tick(this);
+        // The racket does not follow the pointer when no match is on (menu, win screen, lose screen) nor while an ad plays: a touch there is for
+        // the buttons or "tap to continue", not for moving the racket.
+        bool inputLocked = state == State.Menu || state == State.MatchOver;
+        if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
         ai.Tick(this);
 
         switch (state)
@@ -140,7 +146,12 @@ public class GameManager : MonoBehaviour
             case State.Menu:
                 hud.ShowScore = false;
                 hud.Banner = I18n.Tr("BEACH TENNIS GO!\nClick / tap to play");
-                if (Pressed()) StartMatch();
+                // A tap on the menu's own buttons is not a "play" tap; with the mode window open, a tap elsewhere only closes it.
+                if (Pressed() && !PointerOverUi())
+                {
+                    if (menu != null && menu.WindowOpen) menu.CloseWindow();
+                    else if (menu == null || menu.Mode == GameMode.Training) StartMatch(); // Training is the only mode so far
+                }
                 break;
             case State.Serving:
                 hud.Banner = (Time.time < retryNoticeUntil ? I18n.Tr("Retry!") + "\n" : "") + (server == 0 ? I18n.Tr("Your serve\nSwing the racket at the ball") : I18n.Tr("CPU serve"));
@@ -167,6 +178,25 @@ public class GameManager : MonoBehaviour
         UpdateHud();
     }
 
+    // Is the pointer (mouse or first finger) over a UI element (buttons, windows)?
+    static bool PointerOverUi()
+    {
+        var es = UnityEngine.EventSystems.EventSystem.current;
+        if (es == null) return false;
+        return Input.touchCount > 0 ? es.IsPointerOverGameObject(Input.GetTouch(0).fingerId) : es.IsPointerOverGameObject();
+    }
+
+    // Back to the main menu (leaving a mode): the scene stays behind it. Not wired to a button yet.
+    public void ReturnToMenu()
+    {
+        if (poki != null) poki.GameplayStop();
+        ball.SetVisible(false);
+        player.ResetPosition();
+        ai.ResetPosition();
+        cameraRig.SetServing(true);
+        EnterState(State.Menu);
+    }
+
     static bool Pressed()
     {
         if (PokiService.AdPlaying) return false;
@@ -176,6 +206,10 @@ public class GameManager : MonoBehaviour
     void UpdateHud()
     {
         hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
+        if (menu != null) menu.SetVisible(state == State.Menu);
+        bool wonMatch = state == State.MatchOver && playerScore > aiScore;
+        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), I18n.Tr("WON"), I18n.Tr("Click / tap for next level")); winLabelsSet = true; }
+        hud.SetWinTitle(wonMatch);
         bool lostMatch = state == State.MatchOver && aiScore > playerScore;
         hud.SetLoseButtons(lostMatch, lostMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         if (lostMatch && !loseLabelsSet) { hud.SetLoseLabels(I18n.Tr("RESTART"), I18n.Tr("RETRY")); loseLabelsSet = true; }
@@ -212,6 +246,7 @@ public class GameManager : MonoBehaviour
     {
         playerScore = aiScore = 0;
         matchTime = 0f;
+        if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         if (poki != null) poki.GameplayStart(); // the player's first input of the match
         server = 0;
         ai.SetLevel(level);
@@ -422,8 +457,9 @@ public class GameManager : MonoBehaviour
         bool over = IsMatchOver(playerScore, aiScore);
         if (over)
         {
-            hud.Banner = playerScore > aiScore ? I18n.Tr("YOU WIN!\nClick / tap for next level") : I18n.Tr("YOU LOSE");
+            hud.Banner = playerScore > aiScore ? "" : I18n.Tr("YOU LOSE"); // a win shows the big centred title with its hint instead (UpdateHud)
             EnterState(State.MatchOver);
+            if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
             if (poki != null) poki.GameplayStop();
             PlayCrowd();
             return;

@@ -64,6 +64,8 @@ public static class SandNormalMap
         importer.npotScale = TextureImporterNPOTScale.ToNearest;
         importer.maxTextureSize = 512;
         importer.textureCompression = TextureImporterCompression.Compressed;
+        importer.crunchedCompression = true;
+        importer.compressionQuality = 90;
         importer.SaveAndReimport();
         Debug.Log("[BeachTennisGO] Sand normal map written to " + Output);
     }

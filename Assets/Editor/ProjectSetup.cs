@@ -480,6 +480,357 @@ public static class ProjectSetup
     [MenuItem("Tools/Beach Tennis GO/Add Poki SDK")]
     public static void AddPoki() { EnsurePoki(); }
 
+    // Imports a UI sprite for the web: no mip maps, block compressed with crunch (small download), full 500 px resolution kept (no downscale).
+    // The sizes were cropped to multiples of 4, so the GPU can compress them without resizing. `border` (left, bottom, right, top) = nine-slice.
+    static Sprite ConfigureUiSprite(string path, Vector4 border)
+    {
+        var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+        if (importer == null) return null;
+        importer.textureType = TextureImporterType.Sprite;
+        importer.spriteImportMode = SpriteImportMode.Single;
+        importer.alphaIsTransparency = true;
+        importer.mipmapEnabled = false;
+        importer.wrapMode = TextureWrapMode.Clamp;
+        importer.filterMode = FilterMode.Bilinear;
+        importer.maxTextureSize = 512;
+        importer.npotScale = TextureImporterNPOTScale.None;
+        importer.textureCompression = TextureImporterCompression.Compressed;
+        importer.crunchedCompression = true;
+        importer.compressionQuality = 85;
+        importer.spriteBorder = border;
+        importer.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+    }
+
+    // Creates the main menu in the HUD (once): the "Game mode" button (bottom left), the current mode label (top) and the selection window,
+    // which slides in from the left with the three modes. Only Training does something so far. Everything is scene content to adjust by hand.
+    static void EnsureGameModeMenu()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        if (view == null || view.infoText == null) return;
+        if (Object.FindFirstObjectByType<GameModeMenu>() != null) return;
+        var canvas = view.infoText.canvas;
+
+        var windowSprite = ConfigureUiSprite("Assets/Sprites/background-game-mode.png", new Vector4(104f, 104f, 104f, 104f));
+        var gameModeSprite = ConfigureUiSprite("Assets/Sprites/game-mode-button.png", Vector4.zero);
+        var trainingSprite = ConfigureUiSprite("Assets/Sprites/training-mode-button.png", Vector4.zero);
+        var tournamentSprite = ConfigureUiSprite("Assets/Sprites/tournament-button.png", Vector4.zero);
+        var onlineSprite = ConfigureUiSprite("Assets/Sprites/online-mode-button.png", Vector4.zero);
+        var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+
+        var holder = new GameObject("GameModeMenu", typeof(RectTransform), typeof(GameModeMenu));
+        holder.transform.SetParent(canvas.transform, false);
+        Stretch((RectTransform)holder.transform);
+        var menu = holder.GetComponent<GameModeMenu>();
+
+        var root = new GameObject("Menu", typeof(RectTransform));
+        root.transform.SetParent(holder.transform, false);
+        Stretch((RectTransform)root.transform);
+        menu.root = root;
+
+        // Current mode, top centre.
+        var labelGo = new GameObject("ModeLabel", typeof(RectTransform), typeof(Text), typeof(Outline));
+        labelGo.transform.SetParent(root.transform, false);
+        var lrt = (RectTransform)labelGo.transform;
+        lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 1f);
+        lrt.pivot = new Vector2(0.5f, 1f);
+        lrt.anchoredPosition = new Vector2(0f, -22f);
+        lrt.sizeDelta = new Vector2(760f, 64f);
+        var label = labelGo.GetComponent<Text>();
+        label.font = font; label.fontSize = 50; label.color = Color.white; label.alignment = TextAnchor.MiddleCenter;
+        label.raycastTarget = false; label.supportRichText = false; label.text = "TRAINING MODE";
+        label.horizontalOverflow = HorizontalWrapMode.Overflow; label.verticalOverflow = VerticalWrapMode.Overflow;
+        var lo = labelGo.GetComponent<Outline>(); lo.effectColor = new Color(0f, 0.1f, 0.25f, 0.85f); lo.effectDistance = new Vector2(3f, -3f);
+        menu.modeLabel = label;
+
+        Button MakeButton(string name, Transform parent, Vector2 anchor, Vector2 pos, Vector2 size, Sprite sprite)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.sprite = sprite; img.preserveAspect = true;
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img;
+            var colors = btn.colors;
+            colors.normalColor = Color.white; colors.highlightedColor = Color.white; colors.selectedColor = Color.white;
+            colors.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f); colors.disabledColor = new Color(1f, 1f, 1f, 0.5f);
+            btn.colors = colors;
+            return btn;
+        }
+
+        // Round "Game mode" button, bottom left.
+        menu.openButton = MakeButton("GameModeButton", root.transform, new Vector2(0f, 0f), new Vector2(85f, 85f), new Vector2(120f, 120f), gameModeSprite);
+
+        // Selection window: nine-slice background; parked off screen to the left (the script slides it in).
+        var winGo = new GameObject("ModeWindow", typeof(RectTransform), typeof(Image));
+        winGo.transform.SetParent(root.transform, false);
+        var wrt = (RectTransform)winGo.transform;
+        wrt.anchorMin = wrt.anchorMax = new Vector2(0f, 0.5f);
+        wrt.pivot = new Vector2(0f, 0.5f);
+        wrt.sizeDelta = new Vector2(320f, 500f); // opens half way: only the right half is on screen, the buttons sit in it
+        wrt.anchoredPosition = new Vector2(-380f, 0f);
+        var wimg = winGo.GetComponent<Image>();
+        wimg.sprite = windowSprite; wimg.type = Image.Type.Sliced; wimg.pixelsPerUnitMultiplier = 2f; wimg.raycastTarget = true;
+        menu.window = wrt;
+        menu.trainingButton = MakeButton("TrainingButton", winGo.transform, new Vector2(0f, 0.5f), new Vector2(225f, 115f), new Vector2(96f, 96f), trainingSprite);
+        menu.tournamentButton = MakeButton("TournamentButton", winGo.transform, new Vector2(0f, 0.5f), new Vector2(225f, 0f), new Vector2(96f, 96f), tournamentSprite);
+        menu.onlineButton = MakeButton("OnlineButton", winGo.transform, new Vector2(0f, 0.5f), new Vector2(225f, -115f), new Vector2(96f, 96f), onlineSprite);
+
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (gm != null) { gm.menu = menu; EditorUtility.SetDirty(gm); }
+        EditorUtility.SetDirty(menu);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Game mode menu added to the HUD.");
+    }
+
+    static void Stretch(RectTransform rt)
+    {
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Game Mode Menu")]
+    public static void AddGameModeMenu() { EnsureGameModeMenu(); }
+
+    // Win celebration (once): the big "YOU / WON" title in the HUD (white over yellow, gradient + thick dark outline like the game mode button
+    // lettering) and a confetti ParticleSystem in front of the camera, which draws behind the HUD. Both are scene content to adjust by hand.
+    static void EnsureWinCelebration()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (view == null || view.infoText == null || gm == null) return;
+        bool changed = false;
+
+        if (view.winTitle == null)
+        {
+            var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+            var root = new GameObject("WinTitle", typeof(RectTransform));
+            root.transform.SetParent(view.infoText.canvas.transform, false);
+            var rrt = (RectTransform)root.transform;
+            rrt.anchorMin = new Vector2(0f, 0.5f); rrt.anchorMax = new Vector2(1f, 0.5f); // centred on the screen: clear of the result board at the top
+            rrt.pivot = new Vector2(0.5f, 0.5f);
+            rrt.anchoredPosition = Vector2.zero;
+            rrt.sizeDelta = new Vector2(-40f, 300f);
+
+            // Text of the group: yMin..yMax = share of the group's height; `lettering` = gradient + thick outline (like the game mode buttons).
+            Text Line(string name, float yMin, float yMax, int maxSize, Color top, Color bottom, bool lettering)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(UiTextGradient), typeof(Outline), typeof(Outline), typeof(Shadow));
+                go.transform.SetParent(root.transform, false);
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = new Vector2(0f, yMin); rt.anchorMax = new Vector2(1f, yMax);
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+                var t = go.GetComponent<Text>();
+                t.font = font; t.fontSize = maxSize; t.alignment = TextAnchor.MiddleCenter; t.color = Color.white;
+                t.resizeTextForBestFit = true; t.resizeTextMinSize = 20; t.resizeTextMaxSize = maxSize; // shrinks to fit narrow (portrait) screens
+                t.raycastTarget = false; t.supportRichText = false;
+                t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
+                t.text = name == "Line1" ? "YOU" : name == "Line2" ? "WON" : "Click / tap for next level";
+                var g = go.GetComponent<UiTextGradient>(); g.top = top; g.bottom = bottom;
+                var outlines = go.GetComponents<Outline>();
+                var navy = new Color(0.03f, 0.12f, 0.38f, 1f);
+                outlines[0].effectColor = navy; outlines[0].effectDistance = lettering ? new Vector2(6f, -6f) : new Vector2(3f, -3f);
+                outlines[1].effectColor = navy; outlines[1].effectDistance = lettering ? new Vector2(3f, -3f) : new Vector2(1.5f, -1.5f);
+                var sh = go.GetComponent<Shadow>(); sh.effectColor = new Color(0f, 0f, 0f, 0.4f); sh.effectDistance = new Vector2(0f, lettering ? -10f : -5f);
+                return t;
+            }
+            view.winLine1 = Line("Line1", 0.64f, 1f, 105, Color.white, new Color(0.72f, 0.88f, 1f), true);                    // white (to light blue)
+            view.winLine2 = Line("Line2", 0.24f, 0.64f, 135, new Color(1f, 0.93f, 0.35f), new Color(1f, 0.55f, 0.05f), true); // yellow (to orange)
+            view.winHint = Line("Hint", 0f, 0.2f, 34, Color.white, Color.white, false);
+            view.winTitle = root;
+            root.SetActive(false);
+            EditorUtility.SetDirty(view);
+            changed = true;
+        }
+
+        if (gm.confetti == null)
+        {
+            var shader = Shader.Find("BeachTennisGO/Confetti");
+            const string matPath = "Assets/Materials/Confetti.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (mat == null && shader != null) { mat = new Material(shader); AssetDatabase.CreateAsset(mat, matPath); }
+            var cam = Camera.main;
+            if (cam != null && mat != null)
+            {
+                var go = new GameObject("Confetti", typeof(ParticleSystem));
+                go.transform.SetParent(cam.transform, false);
+                go.transform.localPosition = new Vector3(0f, 0.4f, 8f); // in front of the camera, a bit above the centre of the screen
+                go.transform.localRotation = Quaternion.identity;
+                var ps = go.GetComponent<ParticleSystem>();
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+                var main = ps.main;
+                main.duration = 1f; main.loop = false; main.playOnAwake = false;
+                main.simulationSpace = ParticleSystemSimulationSpace.World;
+                main.startLifetime = new ParticleSystem.MinMaxCurve(5f, 7f);
+                main.startSpeed = new ParticleSystem.MinMaxCurve(5f, 11f);
+                main.startSize = new ParticleSystem.MinMaxCurve(0.18f, 0.34f);
+                main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+                main.gravityModifier = 0.35f;
+                main.maxParticles = 400;
+                var colors = new Gradient();
+                colors.SetKeys(new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.25f, 0.3f), 0f), new GradientColorKey(new Color(1f, 0.6f, 0.15f), 0.17f),
+                    new GradientColorKey(new Color(1f, 0.9f, 0.2f), 0.33f), new GradientColorKey(new Color(0.2f, 0.85f, 1f), 0.5f),
+                    new GradientColorKey(new Color(0.3f, 0.5f, 1f), 0.66f), new GradientColorKey(new Color(1f, 0.4f, 0.8f), 0.83f),
+                    new GradientColorKey(Color.white, 1f)
+                }, new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+                main.startColor = new ParticleSystem.MinMaxGradient(colors) { mode = ParticleSystemGradientMode.RandomColor };
+
+                var emission = ps.emission;
+                emission.rateOverTime = 0f;
+                emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 130), new ParticleSystem.Burst(0.2f, 70) }); // the pop, then a smaller second one
+
+                var shape = ps.shape;
+                shape.shapeType = ParticleSystemShapeType.Circle; // flat in the screen plane, so the pieces spread across the screen
+                shape.radius = 0.35f; shape.radiusThickness = 1f; shape.arc = 360f;
+
+                var limit = ps.limitVelocityOverLifetime;
+                limit.enabled = true; limit.dampen = 0f; limit.drag = 2.2f; // slows the burst quickly and keeps the fall slow
+
+                var noise = ps.noise;
+                noise.enabled = true; noise.strength = 0.5f; noise.frequency = 0.6f; noise.scrollSpeed = 0.4f; noise.quality = ParticleSystemNoiseQuality.Low;
+
+                var rot = ps.rotationOverLifetime;
+                rot.enabled = true; rot.z = new ParticleSystem.MinMaxCurve(-5f, 5f);
+
+                var fade = new Gradient();
+                fade.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                             new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 0.65f), new GradientAlphaKey(0f, 1f) });
+                var col = ps.colorOverLifetime;
+                col.enabled = true; col.color = new ParticleSystem.MinMaxGradient(fade);
+
+                var rend = go.GetComponent<ParticleSystemRenderer>();
+                rend.sharedMaterial = mat;
+                rend.renderMode = ParticleSystemRenderMode.Billboard;
+                rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                rend.receiveShadows = false;
+                gm.confetti = ps;
+                EditorUtility.SetDirty(gm);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[BeachTennisGO] Win title and confetti added.");
+        }
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Win Celebration")]
+    public static void AddWinCelebration() { EnsureWinCelebration(); }
+
+    const string ChainSpritePath = "Assets/Sprites/chain-link.png";
+
+    // A tileable chain (one ring seen from the front, one seen edge-on), drawn here so no extra art is needed.
+    static Sprite EnsureChainSprite()
+    {
+        if (!System.IO.File.Exists(ChainSpritePath))
+        {
+            const int w = 24, h = 48;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float a = 0f, shade = 0f;
+                    // ring seen from the front, upper half of the tile
+                    float rx = (x + 0.5f - 12f) / 9f, ry = (y + 0.5f - 36f) / 11.5f, rr = Mathf.Sqrt(rx * rx + ry * ry);
+                    float ring = Mathf.Clamp01((1f - rr) * 8f) * Mathf.Clamp01((rr - 0.55f) * 8f);
+                    if (ring > a) { a = ring; shade = 0.55f + 0.45f * Mathf.Clamp01(1f - (x + 0.5f) / w * 1.3f); }
+                    // ring seen edge-on, lower half
+                    float bx = Mathf.Abs(x + 0.5f - 12f), by = Mathf.Abs(y + 0.5f - 12f);
+                    float bar = Mathf.Clamp01((3.6f - bx) * 2f) * Mathf.Clamp01((10.5f - by) * 2f);
+                    if (bar > a) { a = bar; shade = 0.62f; }
+                    byte v = (byte)(Mathf.Lerp(60f, 205f, shade));
+                    px[y * w + x] = new Color32(v, (byte)(v + 4), (byte)(v + 12), (byte)(a * 255f));
+                }
+            tex.SetPixels32(px);
+            System.IO.File.WriteAllBytes(ChainSpritePath, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(ChainSpritePath, ImportAssetOptions.ForceUpdate);
+        }
+        var importer = AssetImporter.GetAtPath(ChainSpritePath) as TextureImporter;
+        if (importer != null && (importer.textureType != TextureImporterType.Sprite || importer.spriteImportMode != SpriteImportMode.Single))
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.textureCompression = TextureImporterCompression.Uncompressed; // 24 x 48: tiny, and block compression would smear the thin links
+            var settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.spriteMeshType = SpriteMeshType.FullRect; // required to tile
+            importer.SetTextureSettings(settings);
+            importer.SaveAndReimport();
+        }
+        return AssetDatabase.LoadAssetAtPath<Sprite>(ChainSpritePath);
+    }
+
+    // Hangs the result board from two chains (once): a "ScoreboardHanger" object at the top centre of the HUD holds the sign (the existing
+    // ResultBoard, moved under it) and two tiled chain images, and animates it in / out through the top of the screen (HangingSign).
+    static void EnsureScoreboardSign()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        if (view == null || view.board == null || view.scoreboardSign != null) return;
+        var board = (RectTransform)view.board.transform;
+        var canvasTf = board.parent;
+        var chainSprite = EnsureChainSprite();
+
+        var hanger = new GameObject("ScoreboardHanger", typeof(RectTransform), typeof(HangingSign));
+        hanger.transform.SetParent(canvasTf, false);
+        hanger.transform.SetSiblingIndex(board.GetSiblingIndex());
+        var hrt = (RectTransform)hanger.transform;
+        hrt.anchorMin = hrt.anchorMax = new Vector2(0.5f, 1f);
+        hrt.pivot = new Vector2(0.5f, 1f);
+        hrt.sizeDelta = Vector2.zero;
+        hrt.anchoredPosition = Vector2.zero;
+        var sign = hanger.GetComponent<HangingSign>();
+
+        RectTransform MakeChain(string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            go.transform.SetParent(hanger.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(12f, 60f);
+            var img = go.GetComponent<UnityEngine.UI.Image>();
+            img.sprite = chainSprite; img.type = UnityEngine.UI.Image.Type.Tiled; img.pixelsPerUnitMultiplier = 2f; img.raycastTarget = false;
+            return rt;
+        }
+        sign.chainLeft = MakeChain("ChainLeft");
+        sign.chainRight = MakeChain("ChainRight");
+
+        // The board keeps its place, size and scale; it now hangs a chain's length lower, under the hanger.
+        board.SetParent(hanger.transform, false);
+        board.anchoredPosition = new Vector2(board.anchoredPosition.x, board.anchoredPosition.y - sign.chainLength);
+        sign.board = board;
+        view.scoreboardSign = sign;
+        EditorUtility.SetDirty(view);
+        EditorUtility.SetDirty(sign);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Scoreboard hung from two chains.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Hanging Scoreboard")]
+    public static void AddHangingScoreboard() { EnsureScoreboardSign(); }
+
     const string RewardIconPath = "Assets/Sprites/reward-icon.png";
 
     // Small "video" icon (a clapperboard with a play triangle) for the rewarded button, drawn here so no extra art is needed.
@@ -546,7 +897,7 @@ public static class ProjectSetup
         var rootRt = (RectTransform)root.transform;
         rootRt.anchorMin = rootRt.anchorMax = new Vector2(0.5f, 0.33f);
         rootRt.pivot = new Vector2(0.5f, 0.5f);
-        rootRt.sizeDelta = new Vector2(360f, 220f);
+        rootRt.sizeDelta = new Vector2(260f, 150f);
         rootRt.anchoredPosition = Vector2.zero;
 
         Button MakeButton(string name, Vector2 pos, Vector2 size, Color color, int fontSize, out Text label, Sprite iconSprite)
@@ -574,7 +925,7 @@ public static class ProjectSetup
             textGo.transform.SetParent(go.transform, false);
             var trt = (RectTransform)textGo.transform;
             trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
-            trt.offsetMin = new Vector2(iconSprite != null ? 72f : 8f, 0f); trt.offsetMax = new Vector2(-8f, 0f);
+            trt.offsetMin = new Vector2(iconSprite != null ? 50f : 8f, 0f); trt.offsetMax = new Vector2(-8f, 0f);
             label = textGo.GetComponent<Text>();
             label.font = font; label.fontSize = fontSize; label.color = Color.white; label.alignment = TextAnchor.MiddleCenter;
             label.raycastTarget = false; label.supportRichText = false;
@@ -589,16 +940,16 @@ public static class ProjectSetup
                 var irt = (RectTransform)iconGo.transform;
                 irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
                 irt.pivot = new Vector2(0.5f, 0.5f);
-                irt.anchoredPosition = new Vector2(44f, 0f);
-                irt.sizeDelta = new Vector2(52f, 52f);
+                irt.anchoredPosition = new Vector2(30f, 0f);
+                irt.sizeDelta = new Vector2(38f, 38f);
                 var iimg = iconGo.GetComponent<Image>();
                 iimg.sprite = iconSprite; iimg.raycastTarget = false; iimg.preserveAspect = true;
             }
             return btn;
         }
 
-        view.restartButton = MakeButton("Restart", new Vector2(0f, 62f), new Vector2(340f, 96f), new Color(0.18f, 0.50f, 0.87f), 44, out view.restartLabel, null);
-        view.retryButton = MakeButton("Retry", new Vector2(0f, -52f), new Vector2(300f, 78f), new Color(0.84f, 0.27f, 0.27f), 34, out view.retryLabel, icon);
+        view.restartButton = MakeButton("Restart", new Vector2(0f, 40f), new Vector2(240f, 68f), new Color(0.18f, 0.50f, 0.87f), 32, out view.restartLabel, null);
+        view.retryButton = MakeButton("Retry", new Vector2(0f, -34f), new Vector2(210f, 56f), new Color(0.84f, 0.27f, 0.27f), 26, out view.retryLabel, icon);
         view.loseButtons = root;
         root.SetActive(false);
         EditorUtility.SetDirty(view);
@@ -814,7 +1165,7 @@ public static class ProjectSetup
     public static void AddLandingAlert() { EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureLandingAlert(); EnsureLoseButtons(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()
@@ -862,8 +1213,11 @@ public static class ProjectSetup
         AddAdPanels();
         EnsureHud();
         EnsureResultBoard();
+        EnsureScoreboardSign();
         EnsureLandingAlert();
         EnsureLoseButtons();
+        EnsureGameModeMenu();
+        EnsureWinCelebration();
         EnsureSandTexture();
         EnsureAudio();
         EnsureShadows();

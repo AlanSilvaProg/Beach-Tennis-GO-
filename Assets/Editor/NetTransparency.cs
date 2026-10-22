@@ -106,11 +106,9 @@ public static class NetTransparency
         ti.wrapMode = TextureWrapMode.Clamp;
         ti.maxTextureSize = 1024;
         ti.textureCompression = TextureImporterCompression.Compressed;
-        ti.SetPlatformTextureSettings(new TextureImporterPlatformSettings
-        {
-            name = "WebGL", overridden = true, maxTextureSize = 512, format = TextureImporterFormat.Automatic,
-            textureCompression = TextureImporterCompression.Compressed, compressionQuality = 70
-        });
+        ti.maxTextureSize = 512;
+        ti.crunchedCompression = true;
+        ti.compressionQuality = 85;
         ti.SaveAndReimport();
 
         var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(Output);
