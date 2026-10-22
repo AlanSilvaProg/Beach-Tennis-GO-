@@ -24,16 +24,20 @@ public class PokiService : MonoBehaviour
     [DllImport("__Internal")] static extern void PokiGameplayStart();
     [DllImport("__Internal")] static extern void PokiGameplayStop();
     [DllImport("__Internal")] static extern int PokiCommercialBreak();
+    [DllImport("__Internal")] static extern int PokiRewardedBreak();
 #else
     static void PokiGameplayStart() { }
     static void PokiGameplayStop() { }
     static int PokiCommercialBreak() { return 0; }
+    static int PokiRewardedBreak() { return 0; }
 #endif
 
     bool playing;
     float breakStartedAt;
     float volumeBeforeAd = 1f;
     Action onBreakDone;
+    bool commercialRunning;
+    Action<bool> onRewardedDone;
 
     // Static state survives a Play without domain reload.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -59,9 +63,26 @@ public class PokiService : MonoBehaviour
         if (AdPlaying) return; // already waiting for one
         GameplayStop();
         onBreakDone = done;
+        commercialRunning = true;
         AdPlaying = true;
         breakStartedAt = Time.realtimeSinceStartup;
         if (PokiCommercialBreak() == 0) Finish();
+    }
+
+    // Rewarded ad: `done(true)` only when the player watched it to the end. Without an ad (not in Poki, ad blocker, error) it is `done(false)`:
+    // no reward, no message. In the editor the reward is given at once so the feature can be tested. Called exactly once.
+    public void RewardedBreak(Action<bool> done)
+    {
+        if (AdPlaying) return; // never two at the same time (also stops a double click from paying twice)
+        GameplayStop();
+#if UNITY_EDITOR
+        done?.Invoke(true);
+#else
+        onRewardedDone = done;
+        AdPlaying = true;
+        breakStartedAt = Time.realtimeSinceStartup;
+        if (PokiRewardedBreak() == 0) FinishRewarded(false);
+#endif
     }
 
     // ---- called by the page (SendMessage) ----
@@ -74,13 +95,28 @@ public class PokiService : MonoBehaviour
 
     public void OnBreakFinished()
     {
-        if (AdPlaying) Finish();
+        if (AdPlaying && commercialRunning) Finish();
+    }
+
+    public void OnRewardedFinished(string result)
+    {
+        if (AdPlaying && onRewardedDone != null) FinishRewarded(result == "1");
+    }
+
+    void FinishRewarded(bool granted)
+    {
+        AudioListener.volume = volumeBeforeAd;
+        AdPlaying = false;
+        var done = onRewardedDone;
+        onRewardedDone = null;
+        done?.Invoke(granted);
     }
 
     void Finish()
     {
         AudioListener.volume = volumeBeforeAd;
         AdPlaying = false;
+        commercialRunning = false;
         var done = onBreakDone;
         onBreakDone = null;
         done?.Invoke();
@@ -88,7 +124,10 @@ public class PokiService : MonoBehaviour
 
     void Update()
     {
-        if (AdPlaying && Time.realtimeSinceStartup - breakStartedAt > breakTimeout) Finish();
+        if (AdPlaying && Time.realtimeSinceStartup - breakStartedAt > breakTimeout)
+        {
+            if (onRewardedDone != null) FinishRewarded(false); else Finish();
+        }
     }
 
     void OnDestroy()

@@ -3,7 +3,7 @@
 - **Game ID:** `761a602c-88ba-435a-8df8-d5fdbe420364` (`PokiService.GameId`). O SDK HTML5 não pede o id em nenhuma chamada usada aqui (`PokiSDK.init()` não recebe parâmetros e a URL do script não tem id); ele serve para os serviços por jogo da Poki, como o AUDS (dados do jogador / ranking), se forem adicionados depois.
 - **Teste oficial:** suba a build no Poki Inspector (https://inspector.poki.dev/) e depois peça a revisão.
 
-Só os requisitos obrigatórios de SDK por enquanto (loading, gameplay start/stop, commercial break). Sem rewarded, contas, ranking nem save na nuvem.
+Requisitos obrigatórios de SDK (loading, gameplay start/stop, commercial break) e um anúncio premiado (Retry na tela de derrota). Sem contas, ranking nem save na nuvem.
 
 ## Onde está
 - **Script do SDK:** `Assets/WebGLTemplates/BeachTennis/index.html` (gerado por `scripts/build-webgl-template.py` a partir de `scripts/webgl-template/index.template.html`), tag `<script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js">` — vem da CDN oficial, não é empacotado.
@@ -29,6 +29,14 @@ Garantias (testadas com um SDK simulado):
 - Falha de anúncio/SDK é silenciosa (sem mensagem de ad-block, sem timer interno de anúncios). Teto de 90 s para um anúncio que não termina.
 - Anúncios só dentro da Poki (iframe ou host com "poki"); em hosts locais (localhost/IP privado) o SDK entra em modo debug com anúncios simulados, para testar o fluxo. Em outros hosts (ex.: GitHub Pages) o intervalo termina na hora.
 - Página: espaço, setas ↑↓ e a roda do mouse não rolam a página.
+
+## Tela de derrota: RESTART e RETRY (rewarded)
+Ao perder a partida a tela mostra, juntos, dois botões (objeto `LoseButtons` no HUD, ajustável na cena):
+- **RESTART** (padrão, azul, maior, em cima): recomeça tudo do primeiro nível (`level = startLevel`, placar zerado). Passa por um `commercialBreak` antes de voltar ao gameplay. Sempre disponível, sem anúncio premiado.
+- **RETRY** (premiado, vermelho, menor, abaixo, com ícone de vídeo — nunca verde): `PokiSDK.rewardedBreak`; só se o jogador assistiu até o fim joga **o mesmo nível** de novo (placar zerado) e aparece o aviso "Retry!" no saque. Sem anúncio / bloqueador / fora da Poki / erro = nada acontece (sem recompensa e sem mensagem). Não dá para pagar duas vezes (`PokiService.AdPlaying` bloqueia um segundo clique).
+- Os botões só ficam clicáveis depois de `matchOverInputDelay` e nunca durante um anúncio. Durante o anúncio o jogo fica mudo e sem input, sem eventos do SDK.
+- No Editor a recompensa é concedida na hora, para testar. Em hosts locais (localhost/IP privado) o SDK roda em debug com anúncios simulados; fora da Poki em outros hosts (ex.: GitHub Pages) o Retry não dá recompensa.
+- Menu: Tools > Beach Tennis GO > Add Lose Buttons (cria também o EventSystem e o GraphicRaycaster, necessários para os cliques).
 
 ## Checklist dos requisitos (QA da Poki)
 - Desktop/mobile/tablet: mouse e toque; tablet usa o controle por toque (`Application.isMobilePlatform`).

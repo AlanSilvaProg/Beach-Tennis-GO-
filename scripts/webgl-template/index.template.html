@@ -61,6 +61,11 @@
         function initOrTimeout(ms) {
           return Promise.race([initPromise, new Promise(function (r) { setTimeout(function () { r(false); }, ms); })]);
         }
+        // Waits until the events already queued (e.g. the gameplayStop before an ad) have gone to the SDK, then for its init (both with a limit),
+        // so an ad is never requested before the stop that precedes it.
+        function readyForAd(ms) {
+          return Promise.race([chain, new Promise(function (r) { setTimeout(r, ms); })]).then(function () { return initOrTimeout(ms); });
+        }
         function isLocalHost() {
           return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
         }
@@ -68,8 +73,12 @@
         function adsEnabled() {
           try { return window.self !== window.top || /poki/i.test(location.hostname) || isLocalHost(); } catch (e) { return true; }
         }
-        function toUnity(method) {
-          try { if (window.unityGame) window.unityGame.SendMessage("PokiService", method); } catch (e) { }
+        function toUnity(method, arg) {
+          try {
+            if (!window.unityGame) return;
+            if (arg === undefined) window.unityGame.SendMessage("PokiService", method);
+            else window.unityGame.SendMessage("PokiService", method, arg);
+          } catch (e) { }
         }
         function sync() {
           var target = wanted && !hidden && !adRunning;
@@ -113,9 +122,30 @@
             var timer = setTimeout(finish, 90000);
             if (!adsEnabled()) { finish(); return; }
             adRunning = true; sync();
-            initOrTimeout(2500).then(function (ok) {
+            readyForAd(2500).then(function (ok) {
               if (!ok || !sdk()) { finish(); return; }
               Promise.resolve(sdk().commercialBreak(function () { toUnity("OnAdStarted"); })).then(finish, finish);
+            });
+          },
+          // Rewarded ad. Tells the game "OnRewardedFinished" with "1" only when the player watched it to the end; with no ad (not in Poki,
+          // ad blocker, error) the answer is "0" and the game gives no reward and shows no message.
+          rewardedBreak: function () {
+            wanted = false; sync();
+            var done = false;
+            function finish(ok) {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              adRunning = false;
+              toUnity("OnRewardedFinished", ok ? "1" : "0");
+              sync();
+            }
+            var timer = setTimeout(function () { finish(false); }, 90000);
+            if (!adsEnabled()) { finish(false); return; }
+            adRunning = true; sync();
+            readyForAd(2500).then(function (ok) {
+              if (!ok || !sdk()) { finish(false); return; }
+              Promise.resolve(sdk().rewardedBreak(function () { toUnity("OnAdStarted"); })).then(function (success) { finish(!!success); }, function () { finish(false); });
             });
           }
         };

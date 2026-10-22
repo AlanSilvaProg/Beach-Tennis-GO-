@@ -89,6 +89,8 @@ public class GameManager : MonoBehaviour
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
+    bool loseLabelsSet;
+    float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
     float rallyTime;
@@ -110,6 +112,11 @@ public class GameManager : MonoBehaviour
     {
         Application.targetFrameRate = targetFrameRate;
         if (poki == null) poki = FindFirstObjectByType<PokiService>();
+        if (hud != null)
+        {
+            hud.RestartClicked -= OnRestartClicked; hud.RestartClicked += OnRestartClicked; // -= first: never subscribe twice
+            hud.RetryClicked -= OnRetryClicked; hud.RetryClicked += OnRetryClicked;
+        }
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
@@ -123,7 +130,9 @@ public class GameManager : MonoBehaviour
     {
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
-        if (!PokiService.AdPlaying) player.Tick(this); // no input while an ad plays
+        // The racket does not move while an ad plays, nor on the lose screen (touches there are for the buttons).
+        bool loseScreen = state == State.MatchOver && aiScore > playerScore;
+        if (!PokiService.AdPlaying && !loseScreen) player.Tick(this);
         ai.Tick(this);
 
         switch (state)
@@ -134,7 +143,7 @@ public class GameManager : MonoBehaviour
                 if (Pressed()) StartMatch();
                 break;
             case State.Serving:
-                hud.Banner = server == 0 ? I18n.Tr("Your serve\nSwing the racket at the ball") : I18n.Tr("CPU serve");
+                hud.Banner = (Time.time < retryNoticeUntil ? I18n.Tr("Retry!") + "\n" : "") + (server == 0 ? I18n.Tr("Your serve\nSwing the racket at the ball") : I18n.Tr("CPU serve"));
                 if (server == 0) { TryPlayerServe(); if (!serveArmed) hud.Banner += "\n" + I18n.Tr("(pull the racket back first)"); }
                 else if (stateTimer > serveDelay) TryAiServe();
                 break;
@@ -147,7 +156,7 @@ public class GameManager : MonoBehaviour
                 if (stateTimer > pointOverDelay) NextPoint();
                 break;
             case State.MatchOver:
-                if (stateTimer > matchOverInputDelay && Pressed() && !PokiService.AdPlaying)
+                if (playerScore > aiScore && stateTimer > matchOverInputDelay && Pressed() && !PokiService.AdPlaying) // a loss has its own buttons
                 {
                     if (playerScore > aiScore) level++;
                     // Back into gameplay: the ad break (if any) comes here, then the next match starts.
@@ -167,10 +176,36 @@ public class GameManager : MonoBehaviour
     void UpdateHud()
     {
         hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
+        bool lostMatch = state == State.MatchOver && aiScore > playerScore;
+        hud.SetLoseButtons(lostMatch, lostMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
+        if (lostMatch && !loseLabelsSet) { hud.SetLoseLabels(I18n.Tr("RESTART"), I18n.Tr("RETRY")); loseLabelsSet = true; }
         hud.SetScore(playerScore, aiScore);
         hud.SetTime(matchTime);
         if (level != infoLevel) { infoLevel = level; info = I18n.Tr("You  vs  CPU   |   Level {0}", level); }
         hud.Info = info;
+    }
+
+    bool CanUseLoseButtons => state == State.MatchOver && aiScore > playerScore && stateTimer > matchOverInputDelay && !PokiService.AdPlaying;
+
+    // RESTART (standard, always available): starts everything over from the first level.
+    void OnRestartClicked()
+    {
+        if (!CanUseLoseButtons) return;
+        level = startLevel;
+        if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
+    }
+
+    // RETRY (rewarded ad): plays the same level again, but only when the player really watched the ad. No ad / ad blocker = nothing happens.
+    void OnRetryClicked()
+    {
+        if (!CanUseLoseButtons) return;
+        if (poki == null) { retryNoticeUntil = Time.time + 2f; StartMatch(); return; }
+        poki.RewardedBreak(granted =>
+        {
+            if (!granted || state != State.MatchOver) return;
+            retryNoticeUntil = Time.time + 2f; // visible confirmation of the reward
+            StartMatch();
+        });
     }
 
     void StartMatch()
@@ -387,7 +422,7 @@ public class GameManager : MonoBehaviour
         bool over = IsMatchOver(playerScore, aiScore);
         if (over)
         {
-            hud.Banner = playerScore > aiScore ? I18n.Tr("YOU WIN!\nClick / tap for next level") : I18n.Tr("YOU LOSE\nClick / tap to retry");
+            hud.Banner = playerScore > aiScore ? I18n.Tr("YOU WIN!\nClick / tap for next level") : I18n.Tr("YOU LOSE");
             EnterState(State.MatchOver);
             if (poki != null) poki.GameplayStop();
             PlayCrowd();

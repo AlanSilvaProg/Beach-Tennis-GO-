@@ -480,6 +480,136 @@ public static class ProjectSetup
     [MenuItem("Tools/Beach Tennis GO/Add Poki SDK")]
     public static void AddPoki() { EnsurePoki(); }
 
+    const string RewardIconPath = "Assets/Sprites/reward-icon.png";
+
+    // Small "video" icon (a clapperboard with a play triangle) for the rewarded button, drawn here so no extra art is needed.
+    static Sprite EnsureRewardIcon()
+    {
+        if (!System.IO.File.Exists(RewardIconPath))
+        {
+            const int n = 96;
+            var px = new Color32[n * n];
+            Color32 clear = new Color32(0, 0, 0, 0), white = new Color32(255, 255, 255, 255), dark = new Color32(30, 30, 40, 255);
+            bool InRound(float x, float y, float x0, float y0, float x1, float y1, float r)
+            {
+                float cx = Mathf.Clamp(x, x0 + r, x1 - r), cy = Mathf.Clamp(y, y0 + r, y1 - r);
+                return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r && x >= x0 && x <= x1 && y >= y0 && y <= y1;
+            }
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    Color32 c = clear;
+                    if (InRound(x, y, 6, 6, 90, 56, 8)) c = white;                                   // body
+                    if (InRound(x, y, 6, 62, 90, 86, 6)) c = ((x + y / 2) / 12) % 2 == 0 ? white : dark; // clapper with diagonal stripes
+                    // play triangle in the body: (36,16) (36,48) (66,32)
+                    float tx = x - 36f, ty = y - 32f;
+                    if (tx >= 0 && tx <= 30 && Mathf.Abs(ty) <= 16f * (1f - tx / 30f) && y < 58) c = dark;
+                    px[y * n + x] = c;
+                }
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+            tex.SetPixels32(px);
+            System.IO.File.WriteAllBytes(RewardIconPath, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(RewardIconPath, ImportAssetOptions.ForceUpdate);
+        }
+        var importer = AssetImporter.GetAtPath(RewardIconPath) as TextureImporter;
+        if (importer != null && importer.textureType != TextureImporterType.Sprite)
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.SaveAndReimport();
+        }
+        return AssetDatabase.LoadAssetAtPath<Sprite>(RewardIconPath);
+    }
+
+    // Creates the lose screen buttons in the HUD (once): RESTART (standard, bigger, blue) above RETRY (rewarded ad: smaller, red, with a video
+    // icon; never green). Poki rules: the standard option is always there, shown together with the rewarded one, at least as big and above it.
+    // Also makes sure the canvas can receive clicks (GraphicRaycaster) and the scene has an EventSystem.
+    static void EnsureLoseButtons()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        if (view == null || view.infoText == null || view.loseButtons != null) return;
+        var canvas = view.infoText.canvas;
+        if (canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null) canvas.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+        if (Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+            new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem), typeof(UnityEngine.EventSystems.StandaloneInputModule));
+
+        var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+        var box = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"); // rounded, sliced
+        var icon = EnsureRewardIcon();
+
+        var root = new GameObject("LoseButtons", typeof(RectTransform));
+        root.transform.SetParent(canvas.transform, false);
+        var rootRt = (RectTransform)root.transform;
+        rootRt.anchorMin = rootRt.anchorMax = new Vector2(0.5f, 0.33f);
+        rootRt.pivot = new Vector2(0.5f, 0.5f);
+        rootRt.sizeDelta = new Vector2(360f, 220f);
+        rootRt.anchoredPosition = Vector2.zero;
+
+        Button MakeButton(string name, Vector2 pos, Vector2 size, Color color, int fontSize, out Text label, Sprite iconSprite)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(root.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.sprite = box; img.type = Image.Type.Sliced; img.color = Color.white;
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img;
+            var colors = btn.colors;
+            colors.normalColor = color;
+            colors.highlightedColor = Color.Lerp(color, Color.white, 0.2f);
+            colors.pressedColor = Color.Lerp(color, Color.black, 0.25f);
+            colors.selectedColor = color;
+            colors.disabledColor = new Color(color.r, color.g, color.b, 0.45f);
+            btn.colors = colors;
+
+            var textGo = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(Outline));
+            textGo.transform.SetParent(go.transform, false);
+            var trt = (RectTransform)textGo.transform;
+            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+            trt.offsetMin = new Vector2(iconSprite != null ? 72f : 8f, 0f); trt.offsetMax = new Vector2(-8f, 0f);
+            label = textGo.GetComponent<Text>();
+            label.font = font; label.fontSize = fontSize; label.color = Color.white; label.alignment = TextAnchor.MiddleCenter;
+            label.raycastTarget = false; label.supportRichText = false;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow; label.verticalOverflow = VerticalWrapMode.Overflow;
+            label.text = name.ToUpperInvariant();
+            var o = textGo.GetComponent<Outline>(); o.effectColor = new Color(0f, 0f, 0f, 0.55f); o.effectDistance = new Vector2(2f, -2f);
+
+            if (iconSprite != null)
+            {
+                var iconGo = new GameObject("VideoIcon", typeof(RectTransform), typeof(Image));
+                iconGo.transform.SetParent(go.transform, false);
+                var irt = (RectTransform)iconGo.transform;
+                irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
+                irt.pivot = new Vector2(0.5f, 0.5f);
+                irt.anchoredPosition = new Vector2(44f, 0f);
+                irt.sizeDelta = new Vector2(52f, 52f);
+                var iimg = iconGo.GetComponent<Image>();
+                iimg.sprite = iconSprite; iimg.raycastTarget = false; iimg.preserveAspect = true;
+            }
+            return btn;
+        }
+
+        view.restartButton = MakeButton("Restart", new Vector2(0f, 62f), new Vector2(340f, 96f), new Color(0.18f, 0.50f, 0.87f), 44, out view.restartLabel, null);
+        view.retryButton = MakeButton("Retry", new Vector2(0f, -52f), new Vector2(300f, 78f), new Color(0.84f, 0.27f, 0.27f), 34, out view.retryLabel, icon);
+        view.loseButtons = root;
+        root.SetActive(false);
+        EditorUtility.SetDirty(view);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Lose screen buttons added to the HUD.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Lose Buttons")]
+    public static void AddLoseButtons() { EnsureLoseButtons(); }
+
     const string SandTexturePath = "Assets/Sprites/sand-texture.jpeg";
 
     // Puts the seamless sand texture on the ground: the big "Sand" slab and the slightly darker court area share one world-space
@@ -684,7 +814,7 @@ public static class ProjectSetup
     public static void AddLandingAlert() { EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureLandingAlert(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureLandingAlert(); EnsureLoseButtons(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()
@@ -733,6 +863,7 @@ public static class ProjectSetup
         EnsureHud();
         EnsureResultBoard();
         EnsureLandingAlert();
+        EnsureLoseButtons();
         EnsureSandTexture();
         EnsureAudio();
         EnsureShadows();

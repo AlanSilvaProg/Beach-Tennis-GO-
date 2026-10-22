@@ -111,7 +111,10 @@ public static class I18n
         { "Point!", "Ponto!" },
         { "CPU point", "Ponto da CPU" },
         { "YOU WIN!\nClick / tap for next level", "VOCÊ VENCEU!\nClique / toque para o próximo nível" },
-        { "YOU LOSE\nClick / tap to retry", "VOCÊ PERDEU\nClique / toque para tentar de novo" },
+        { "YOU LOSE", "VOCÊ PERDEU" },
+        { "RESTART", "REINICIAR" },
+        { "RETRY", "TENTAR DE NOVO" },
+        { "Retry!", "Nova tentativa!" },
         { "You  vs  CPU   |   Level {0}", "Você  vs  CPU   |   Nível {0}" },
     };
 
@@ -124,7 +127,10 @@ public static class I18n
         { "Point!", "¡Punto!" },
         { "CPU point", "Punto de la CPU" },
         { "YOU WIN!\nClick / tap for next level", "¡GANASTE!\nHaz clic / toca para el siguiente nivel" },
-        { "YOU LOSE\nClick / tap to retry", "PERDISTE\nHaz clic / toca para reintentar" },
+        { "YOU LOSE", "PERDISTE" },
+        { "RESTART", "REINICIAR" },
+        { "RETRY", "REINTENTAR" },
+        { "Retry!", "¡Otro intento!" },
         { "You  vs  CPU   |   Level {0}", "Tú  vs  CPU   |   Nivel {0}" },
     };
 }

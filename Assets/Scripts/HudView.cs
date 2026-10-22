@@ -15,6 +15,15 @@ public class HudView : MonoBehaviour
     [Tooltip("Match time as HH:MM:SS: hours tens, hours units, minutes tens, minutes units, seconds tens, seconds units.")]
     public Text[] timeDigits = new Text[6];
 
+    [Header("Lose screen buttons (Restart = standard, Retry = rewarded ad)")]
+    public GameObject loseButtons;
+    public Button restartButton;
+    public Button retryButton;
+    public Text restartLabel;
+    public Text retryLabel;
+    public event System.Action RestartClicked;
+    public event System.Action RetryClicked;
+
     [Header("Text")]
     public Text infoText;
     public Text bannerText;
@@ -25,6 +34,9 @@ public class HudView : MonoBehaviour
 
     void Awake()
     {
+        if (restartButton != null) { restartButton.onClick.RemoveAllListeners(); restartButton.onClick.AddListener(() => RestartClicked?.Invoke()); }
+        if (retryButton != null) { retryButton.onClick.RemoveAllListeners(); retryButton.onClick.AddListener(() => RetryClicked?.Invoke()); }
+        SetLoseButtons(false, false);
         Apply(infoText, info);
         Apply(bannerText, banner);
         SetScoreVisible(showScore);
@@ -72,6 +84,20 @@ public class HudView : MonoBehaviour
             int digit = value / (int)Mathf.Pow(10, count - 1 - i) % 10;
             digits[index].text = digit.ToString();
         }
+    }
+
+    // The two buttons of the lose screen: shown only when `visible`, clickable only when `interactable` (not during the first moments, not during an ad).
+    public void SetLoseButtons(bool visible, bool interactable)
+    {
+        if (loseButtons != null && loseButtons.activeSelf != visible) loseButtons.SetActive(visible);
+        if (restartButton != null) restartButton.interactable = interactable;
+        if (retryButton != null) retryButton.interactable = interactable;
+    }
+
+    public void SetLoseLabels(string restart, string retry)
+    {
+        Apply(restartLabel, restart);
+        Apply(retryLabel, retry);
     }
 
     public string Info
