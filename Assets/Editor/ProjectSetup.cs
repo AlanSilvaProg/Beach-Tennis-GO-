@@ -456,6 +456,30 @@ public static class ProjectSetup
     [MenuItem("Tools/Beach Tennis GO/Add Sea")]
     public static void AddSea() { EnsureSea(); }
 
+    // Adds the Poki SDK service to the scene (once) and links it to the GameManager. The SDK script and the page-side bridge are in the
+    // WebGL template. Poki events: gameplayStart on the player's first input of a match, gameplayStop when it ends, commercialBreak before the next one.
+    static void EnsurePoki()
+    {
+        var scene = OpenGameplayScene();
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (gm == null) return;
+        var service = Object.FindFirstObjectByType<PokiService>();
+        if (service == null)
+        {
+            var go = new GameObject("PokiService", typeof(PokiService)); // the page calls back by this exact name
+            service = go.GetComponent<PokiService>();
+        }
+        if (gm.poki == service) return;
+        gm.poki = service;
+        EditorUtility.SetDirty(gm);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Poki service added to the scene.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Poki SDK")]
+    public static void AddPoki() { EnsurePoki(); }
+
     const string SandTexturePath = "Assets/Sprites/sand-texture.jpeg";
 
     // Puts the seamless sand texture on the ground: the big "Sand" slab and the slightly darker court area share one world-space

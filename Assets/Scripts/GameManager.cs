@@ -15,6 +15,8 @@ public class GameManager : MonoBehaviour
     public CameraRig cameraRig;
     public HudView hud;
     public ShotAnnouncer announcer;
+    [Tooltip("Poki SDK events (gameplay start/stop and the ad break between matches). Optional.")]
+    public PokiService poki;
 
     public enum LanguageChoice { Auto, English, Portuguese, Spanish }
 
@@ -107,6 +109,7 @@ public class GameManager : MonoBehaviour
     void Awake()
     {
         Application.targetFrameRate = targetFrameRate;
+        if (poki == null) poki = FindFirstObjectByType<PokiService>();
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
@@ -120,7 +123,7 @@ public class GameManager : MonoBehaviour
     {
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
-        player.Tick(this);
+        if (!PokiService.AdPlaying) player.Tick(this); // no input while an ad plays
         ai.Tick(this);
 
         switch (state)
@@ -144,10 +147,11 @@ public class GameManager : MonoBehaviour
                 if (stateTimer > pointOverDelay) NextPoint();
                 break;
             case State.MatchOver:
-                if (stateTimer > matchOverInputDelay && Pressed())
+                if (stateTimer > matchOverInputDelay && Pressed() && !PokiService.AdPlaying)
                 {
                     if (playerScore > aiScore) level++;
-                    StartMatch();
+                    // Back into gameplay: the ad break (if any) comes here, then the next match starts.
+                    if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
                 }
                 break;
         }
@@ -156,6 +160,7 @@ public class GameManager : MonoBehaviour
 
     static bool Pressed()
     {
+        if (PokiService.AdPlaying) return false;
         return Input.GetMouseButtonDown(0) || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began);
     }
 
@@ -172,6 +177,7 @@ public class GameManager : MonoBehaviour
     {
         playerScore = aiScore = 0;
         matchTime = 0f;
+        if (poki != null) poki.GameplayStart(); // the player's first input of the match
         server = 0;
         ai.SetLevel(level);
         player.ResetPosition();
@@ -370,6 +376,7 @@ public class GameManager : MonoBehaviour
         {
             hud.Banner = playerScore > aiScore ? I18n.Tr("YOU WIN!\nClick / tap for next level") : I18n.Tr("YOU LOSE\nClick / tap to retry");
             EnterState(State.MatchOver);
+            if (poki != null) poki.GameplayStop();
             PlayCrowd();
             return;
         }

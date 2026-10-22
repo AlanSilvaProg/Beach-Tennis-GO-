@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0b4a86">
     <title>Beach Tennis GO!</title>
+    <!-- Poki SDK: must come from Poki's official CDN (it is not bundled). -->
+    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
     <link rel="icon" id="favicon" type="image/webp">
     <style>
       /* Everything the loading screen needs is inline (logo, blurred background), so it shows before any other file is downloaded. */
@@ -40,6 +42,86 @@
       var fill = document.querySelector("#loading-fill");
       document.querySelector("#favicon").href = document.querySelector("#loading-logo").src; // same inline image, not a second copy
 
+      // ---- Poki SDK bridge --------------------------------------------------------------------------------------------------------
+      // Everything is safe without the SDK (other hosts, ad blocker, slow network): the game keeps running and breaks end at once.
+      // Gameplay events are derived from three facts (the game wants to play / the page is visible / no ad is running) and are only
+      // sent when the result changes, so they never repeat and never fire during an ad.
+      window.PokiBridge = (function () {
+        var sdk = function () { return window.PokiSDK || null; };
+        var wanted = false, hidden = false, adRunning = false, sent = false;
+        var chain = Promise.resolve();
+
+        var initPromise = new Promise(function (resolve) {
+          var s = sdk();
+          if (!s) { resolve(false); return; }
+          try { if (isLocalHost()) s.setDebug(true); } catch (e) { }   // local tests only: SDK logs and simulated ads
+          Promise.resolve(s.init()).then(function () { resolve(true); }, function () { resolve(false); }); // ad blocker etc.: carry on
+        });
+        // The SDK may take long or never answer: never keep the game waiting more than this.
+        function initOrTimeout(ms) {
+          return Promise.race([initPromise, new Promise(function (r) { setTimeout(function () { r(false); }, ms); })]);
+        }
+        function isLocalHost() {
+          return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
+        }
+        // Ads only make sense inside Poki (the game runs in a Poki iframe); elsewhere (local, GitHub Pages) the game goes straight on.
+        function adsEnabled() {
+          try { return window.self !== window.top || /poki/i.test(location.hostname) || isLocalHost(); } catch (e) { return true; }
+        }
+        function toUnity(method) {
+          try { if (window.unityGame) window.unityGame.SendMessage("PokiService", method); } catch (e) { }
+        }
+        function sync() {
+          var target = wanted && !hidden && !adRunning;
+          if (target === sent) return;
+          sent = target;
+          chain = chain.then(function () { return initPromise; }).then(function (ok) {
+            if (!ok) return;
+            try { if (target) sdk().gameplayStart(); else sdk().gameplayStop(); } catch (e) { }
+          });
+        }
+        function updateHidden() { hidden = document.hidden || !document.hasFocus(); sync(); }
+        document.addEventListener("visibilitychange", updateHidden);
+        window.addEventListener("blur", updateHidden);
+        window.addEventListener("focus", updateHidden);
+
+        // The game is inside a page that scrolls: space, arrows and the wheel must not move it.
+        window.addEventListener("keydown", function (e) {
+          var t = e.target;
+          if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " ") e.preventDefault();
+        });
+        window.addEventListener("wheel", function (e) { e.preventDefault(); }, { passive: false });
+
+        return {
+          loadingStart: function () { initPromise.then(function (ok) { if (ok) try { sdk().gameLoadingStart(); } catch (e) { } }); },
+          loadingFinished: function () { initPromise.then(function (ok) { if (ok) try { sdk().gameLoadingFinished(); } catch (e) { } }); },
+          gameplayStart: function () { wanted = true; sync(); },
+          gameplayStop: function () { wanted = false; sync(); },
+          // Ad before heading back into gameplay. Tells the game with "OnAdStarted" (mute) and "OnBreakFinished" (always, exactly once).
+          commercialBreak: function () {
+            wanted = false; sync();
+            var done = false;
+            function finish() {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              adRunning = false;
+              toUnity("OnBreakFinished");
+              sync();
+            }
+            var timer = setTimeout(finish, 90000);
+            if (!adsEnabled()) { finish(); return; }
+            adRunning = true; sync();
+            initOrTimeout(2500).then(function (ok) {
+              if (!ok || !sdk()) { finish(); return; }
+              Promise.resolve(sdk().commercialBreak(function () { toUnity("OnAdStarted"); })).then(finish, finish);
+            });
+          }
+        };
+      })();
+      window.PokiBridge.loadingStart();
+
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/WebGLBuild.loader.js";
       var config = {
@@ -66,7 +148,9 @@
       script.onload = function () {
         createUnityInstance(canvas, config, function (progress) {
           fill.style.width = (100 * progress) + "%";   // 0..1 while the data, framework and code are downloaded and started
-        }).then(function () {
+        }).then(function (instance) {
+          window.unityGame = instance;            // the Poki bridge talks back to the game through this
+          window.PokiBridge.loadingFinished();
           fill.style.width = "100%";
           loading.classList.add("done");
           setTimeout(function () { loading.style.display = "none"; }, 500);

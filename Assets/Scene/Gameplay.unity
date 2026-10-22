@@ -364,6 +364,7 @@ MonoBehaviour:
   cameraRig: {fileID: 1347760171}
   hud: {fileID: 64010825}
   announcer: {fileID: 937326119}
+  poki: {fileID: 1795470236}
   language: 0
   sfx: {fileID: 64010828}
   playerHit: {fileID: 8300000, guid: 00b139280f2e14d719c2d39ad149174f, type: 3}
@@ -2919,6 +2920,11 @@ MonoBehaviour:
   margin: 0.15
   viewportPadding: 0.02
   minDistance: 6
+  wideStartAspect: 1.9
+  wideFullAspect: 2.5
+  wideZoom: 0.8
+  narrowStrength: 0.6
+  narrowMaxFactor: 1.4
   followX: 0.6
   maxPan: 2
   racketPadding: {x: 0.08, y: 0.1}
@@ -3950,6 +3956,51 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1793973244}
   m_CullTransparentMesh: 1
+--- !u!1 &1795470235
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1795470237}
+  - component: {fileID: 1795470236}
+  m_Layer: 0
+  m_Name: PokiService
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1795470236
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1795470235}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 734518dd19d2b40d381d89f26a5f9201, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PokiService
+  breakTimeout: 90
+--- !u!4 &1795470237
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1795470235}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1802069754 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
@@ -4825,3 +4876,4 @@ SceneRoots:
   - {fileID: 1593431060}
   - {fileID: 937326121}
   - {fileID: 242156330}
+  - {fileID: 1795470237}
