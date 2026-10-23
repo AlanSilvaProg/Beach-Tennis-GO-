@@ -33,7 +33,7 @@ Garantias:
 Aplicadas por `BuildScript.ApplyPokiBuildSettings()` antes de **todo** build:
 - Compressão **Disabled** (os servidores da Poki comprimem; por isso `.data` e `.wasm` saem "crus", maiores no zip) e `decompressionFallback` desligado.
 - **Name Files As Hashes** ligado (evita cache velho).
-- Exceções: None. Strip Engine Code ligado. Managed Stripping **High**. Data Caching **desligado** de propósito: no inspector da Poki, recarregar a página travava na tela de loading (só abrindo a aba de novo funcionava) com o cache do Unity (`[UnityCache]` / IndexedDB) ligado; com nomes de arquivo em hash o cache HTTP do navegador já cobre o reuso. API Compatibility .NET Standard 2.0.
+- Exceções: None. Strip Engine Code ligado. Managed Stripping **High**. Data Caching ligado. API Compatibility .NET Standard 2.0.
 - Já feitos antes: áudio mono (Vorbis), texturas com crunch, sprites sem mipmaps, módulos mínimos, vozes só do idioma do jogador (StreamingAssets).
 
 ## Checklist dos requisitos (QA da Poki)
