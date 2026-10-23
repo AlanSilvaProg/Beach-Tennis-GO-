@@ -99,7 +99,7 @@ public class GameManager : MonoBehaviour
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
-    bool loseLabelsSet, winLabelsSet, namesSet;
+    bool loseLabelsSet, winLabelsSet, namesSet, backLabelsSet;
     float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
@@ -116,6 +116,8 @@ public class GameManager : MonoBehaviour
     public float BallSpeed => ballSpeed;
     public PlayerRacketController Player => player;
     public bool AiShouldChase => state == State.Rally && lastHitter == 0;
+    // A match is on: serving, rallying or pausing between points (not the menu or the result screens).
+    public bool MatchOn => state == State.Serving || state == State.Rally || state == State.PointOver;
     public bool AiServing => state == State.Serving && server == 1;
 
     void Awake()
@@ -128,6 +130,7 @@ public class GameManager : MonoBehaviour
             hud.RestartClicked -= OnRestartClicked; hud.RestartClicked += OnRestartClicked; // -= first: never subscribe twice
             hud.RetryClicked -= OnRetryClicked; hud.RetryClicked += OnRetryClicked;
             hud.ContinueClicked -= OnContinueClicked; hud.ContinueClicked += OnContinueClicked;
+            hud.BackClicked -= OnBackClicked; hud.BackClicked += OnBackClicked;
         }
         ChannelMute.Attach(sfx, AudioChannel.Sfx);
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
@@ -190,9 +193,14 @@ public class GameManager : MonoBehaviour
         return Input.touchCount > 0 ? es.IsPointerOverGameObject(Input.GetTouch(0).fingerId) : es.IsPointerOverGameObject();
     }
 
-    // Back to the main menu (leaving a mode): the scene stays behind it. Not wired to a button yet.
+    // Back to the main menu (leaving a mode): the scene stays behind it.
     public void ReturnToMenu()
     {
+        if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        playerScore = aiScore = 0; // the board starts from zero again: points, sets and the clock
+        playerSets = aiSets = 0;
+        newSetPending = false;
+        matchTime = 0f;
         if (poki != null) poki.GameplayStop();
         ball.SetVisible(false);
         player.ResetPosition();
@@ -214,6 +222,7 @@ public class GameManager : MonoBehaviour
         hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
         bool wonMatch = state == State.MatchOver && playerScore > aiScore;
         if (menu != null) menu.SetVisible(state == State.Menu || wonMatch, state == State.Menu); // the win screen also offers the Game mode button
+        if (state == State.MatchOver && !backLabelsSet) { hud.SetBackLabels(I18n.Tr("BACK")); backLabelsSet = true; }
         if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), I18n.Tr("WON"), I18n.Tr("CONTINUE")); winLabelsSet = true; }
         hud.SetWinTitle(wonMatch);
         hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
@@ -247,6 +256,13 @@ public class GameManager : MonoBehaviour
         if (!CanUseContinue) return;
         level++;
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
+    }
+
+    // BACK (win and lose screens): to the main menu, where the game mode can be changed. The level reached is kept.
+    void OnBackClicked()
+    {
+        if (state != State.MatchOver || stateTimer <= matchOverInputDelay || PokiService.AdPlaying) return;
+        ReturnToMenu();
     }
 
     bool CanUseLoseButtons => state == State.MatchOver && aiScore > playerScore && stateTimer > matchOverInputDelay && !PokiService.AdPlaying;

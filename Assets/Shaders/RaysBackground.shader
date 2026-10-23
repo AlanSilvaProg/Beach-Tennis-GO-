@@ -1,5 +1,5 @@
-// Rotating "sunburst" UI background: a radial gradient (centre -> middle -> edge), soft alternating rays and white dashes that fly along the
-// rays. Everything is drawn from maths (no texture), so it costs no download and stays sharp at any size. Use it on a RawImage.
+// Rotating "sunburst" UI background: a radial gradient (centre -> middle -> edge), soft alternating rays that turn, and white dashes that
+// fly straight out of the centre like particles. Everything is drawn from maths (no texture), so it costs no download and stays sharp at any size. Use it on a RawImage.
 // _Aspect = width / height of the rectangle (RaysBackground sets it); the vertex colour's alpha fades the whole thing.
 Shader "BeachTennisGO/RaysBackground"
 {
@@ -14,6 +14,7 @@ Shader "BeachTennisGO/RaysBackground"
         _Rays ("Number of soft rays", Float) = 14
         _RayStrength ("Soft ray contrast", Range(0, 0.3)) = 0.08
         _DashColor ("Dash colour", Color) = (1, 1, 1, 0.9)
+        _DashSpeed ("Dash flying speed (multiplier)", Float) = 1
         _Aspect ("Aspect (w/h)", Float) = 1.78
     }
     SubShader
@@ -34,25 +35,29 @@ Shader "BeachTennisGO/RaysBackground"
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; fixed4 color : COLOR; };
 
             fixed4 _CenterColor, _MidColor, _EdgeColor, _DashColor;
-            float _MidRadius, _Spin, _Rays, _RayStrength, _Aspect;
+            float _MidRadius, _Spin, _Rays, _RayStrength, _Aspect, _DashSpeed;
 
             v2f vert(appdata v) { v2f o; o.pos = UnityObjectToClipPos(v.vertex); o.uv = v.uv; o.color = v.color; return o; }
 
             float hash(float2 p) { return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
 
-            // One layer of dashes: `count` sectors around the circle; a sector holds a dash on its ray with some probability.
-            float dashes(float turns, float r, float count, float seed, float width, float shift)
+            // One layer of dashes, flying like particles: `count` fixed directions around the centre; each direction carries one dash that is
+            // born at the centre, flies straight outwards at its own speed and starts again from the centre when it leaves the screen.
+            // `angle` is in turns and does NOT include the spin of the background, so the dashes never turn.
+            float dashes(float angle, float r, float count, float seed, float width, float speed, float time)
             {
-                float t = frac(turns + shift) * count;
+                float t = frac(angle) * count;
                 float sector = floor(t);
-                float across = (frac(t) - 0.5) / count * 6.2831853 * r; // distance from the ray, in screen units
-                float h1 = hash(float2(sector, seed));
-                float h2 = hash(float2(sector, seed + 7.3));
-                float h3 = hash(float2(sector, seed + 13.9));
-                float start = 0.12 + 1.5 * h2;
-                float len = 0.05 + 0.22 * h3;
-                float onRay = step(abs(across), width) * step(start, r) * step(r, start + len) * step(h1, 0.5);
-                return onRay;
+                float across = (frac(t) - 0.5) / count * 6.2831853 * r; // distance from the direction's line, in screen units
+                float present = step(hash(float2(sector, seed)), 0.6);
+                float phase = hash(float2(sector, seed + 7.3));
+                float lenBase = 0.05 + 0.16 * hash(float2(sector, seed + 13.9));
+                float fast = 0.65 + 0.7 * hash(float2(sector, seed + 21.1));
+                float head = frac(phase + time * speed * fast) * 2.1;       // distance of the front of the dash from the centre
+                float len = lenBase * (0.4 + head);                          // longer as it speeds past, like a speed line
+                float onLine = step(abs(across), width * (0.5 + 0.5 * head)) * step(head - len, r) * step(r, head);
+                float born = smoothstep(0.06, 0.3, r);                       // fades in just after leaving the centre
+                return present * onLine * born;
             }
 
             fixed4 frag(v2f i) : SV_Target
@@ -70,10 +75,11 @@ Shader "BeachTennisGO/RaysBackground"
                 float ray = 0.5 + 0.5 * sin(turns * 6.2831853 * _Rays);
                 col += (ray - 0.5) * _RayStrength;
 
-                // Dashes: three layers turning at slightly different speeds, so they drift against each other.
-                float d = dashes(turns, r, 36.0, 1.0, 0.0090, 0.0)
-                        + dashes(turns, r, 24.0, 5.0, 0.0075, _Time.y * 0.006)
-                        + dashes(turns, r, 52.0, 9.0, 0.0050, -_Time.y * 0.010);
+                // Dashes: three layers flying outwards at different speeds (see dashes()); they do not spin with the background.
+                float still = atan2(p.y, p.x) / 6.2831853;
+                float d = dashes(still, r, 36.0, 1.0, 0.0090, 0.16 * _DashSpeed, _Time.y)
+                        + dashes(still, r, 24.0, 5.0, 0.0075, 0.11 * _DashSpeed, _Time.y)
+                        + dashes(still, r, 52.0, 9.0, 0.0050, 0.21 * _DashSpeed, _Time.y);
                 col = lerp(col, _DashColor.rgb, saturate(d) * _DashColor.a);
 
                 col *= 1.0 - 0.18 * smoothstep(0.55, 1.0, g);              // soft vignette

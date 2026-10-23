@@ -27,6 +27,10 @@ public class HudView : MonoBehaviour
     public Button retryButton;
     public TMP_Text restartLabel;
     public TMP_Text retryLabel;
+    [Tooltip("BACK on the lose screen: to the main menu.")]
+    public Button loseBackButton;
+    public TMP_Text loseBackLabel;
+    public event System.Action BackClicked;
     public event System.Action RestartClicked;
     public event System.Action RetryClicked;
 
@@ -37,6 +41,9 @@ public class HudView : MonoBehaviour
     [Tooltip("CONTINUE: starts the next level. Part of the same centred group, below the title.")]
     public Button winContinueButton;
     public TMP_Text winContinueLabel;
+    [Tooltip("BACK on the win screen: to the main menu.")]
+    public Button winBackButton;
+    public TMP_Text winBackLabel;
     public event System.Action ContinueClicked;
     [Tooltip("Rotating sunburst behind the whole win screen (RawImage with the RaysBackground shader); fades in with the title.")]
     public RawImage winBackground;
@@ -65,6 +72,8 @@ public class HudView : MonoBehaviour
     {
         if (restartButton != null) { restartButton.onClick.RemoveAllListeners(); restartButton.onClick.AddListener(() => RestartClicked?.Invoke()); }
         if (retryButton != null) { retryButton.onClick.RemoveAllListeners(); retryButton.onClick.AddListener(() => RetryClicked?.Invoke()); }
+        if (loseBackButton != null) { loseBackButton.onClick.RemoveAllListeners(); loseBackButton.onClick.AddListener(() => BackClicked?.Invoke()); }
+        if (winBackButton != null) { winBackButton.onClick.RemoveAllListeners(); winBackButton.onClick.AddListener(() => BackClicked?.Invoke()); }
         if (winContinueButton != null) { winContinueButton.onClick.RemoveAllListeners(); winContinueButton.onClick.AddListener(() => ContinueClicked?.Invoke()); }
         SetLoseButtons(false, false);
         Apply(infoText, info);
@@ -122,6 +131,7 @@ public class HudView : MonoBehaviour
         if (loseButtons != null && loseButtons.activeSelf != visible) loseButtons.SetActive(visible);
         if (restartButton != null) restartButton.interactable = interactable;
         if (retryButton != null) retryButton.interactable = interactable;
+        if (loseBackButton != null) loseBackButton.interactable = interactable;
     }
 
     public void SetLoseLabels(string restart, string retry)
@@ -162,6 +172,13 @@ public class HudView : MonoBehaviour
     public void SetWinContinueInteractable(bool interactable)
     {
         if (winContinueButton != null) winContinueButton.interactable = interactable;
+        if (winBackButton != null) winBackButton.interactable = interactable;
+    }
+
+    public void SetBackLabels(string back)
+    {
+        Apply(winBackLabel, back);
+        Apply(loseBackLabel, back);
     }
 
     void Update()

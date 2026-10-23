@@ -29,7 +29,8 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Aspect: 0.5625
+    - _Aspect: 1.6
+    - _DashSpeed: 1
     - _MidRadius: 0.45
     - _RayStrength: 0
     - _Rays: 14

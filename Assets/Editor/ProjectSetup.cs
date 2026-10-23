@@ -1118,14 +1118,14 @@ public static class ProjectSetup
         Debug.Log("[BeachTennisGO] Result board digits ready (" + (fresh ? "created" : "converted to one Text per digit") + ").");
     }
 
-    // Win screen: CONTINUE under the title (next level); the Game mode button's window gets a BACK button (closes it). Replaces the old "tap to continue" hint.
+    // Win screen: CONTINUE under the title (next level). Replaces the old "tap to continue" hint.
     static void EnsureWinNavigation()
     {
         var scene = OpenGameplayScene();
         var view = Object.FindFirstObjectByType<HudView>();
         var menu = Object.FindFirstObjectByType<GameModeMenu>();
         if (view == null || view.winTitle == null || menu == null || menu.window == null) return;
-        if (view.winContinueButton != null && menu.backButton != null) return;
+        if (view.winContinueButton != null) return;
 
         var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
         var box = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"); // rounded, sliced
@@ -1174,18 +1174,94 @@ public static class ProjectSetup
             view.winContinueButton = MakeButton("Continue", view.winTitle.transform, new Vector2(0.5f, 0.1f), Vector2.zero, new Vector2(300f, 76f), new Color(0.2f, 0.66f, 0.3f), 34, out view.winContinueLabel);
             EditorUtility.SetDirty(view);
         }
-        if (menu.backButton == null)
-        {
-            menu.backButton = MakeButton("Back", menu.window, new Vector2(0f, 0.5f), new Vector2(0f, -205f), new Vector2(150f, 54f), new Color(0.18f, 0.5f, 0.87f), 28, out menu.backLabel);
-            EditorUtility.SetDirty(menu);
-        }
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
-        Debug.Log("[BeachTennisGO] Win screen buttons (Continue, Back) added.");
+        Debug.Log("[BeachTennisGO] Win screen CONTINUE button added.");
     }
 
     [MenuItem("Tools/Beach Tennis GO/Add Win Screen Buttons")]
     public static void AddWinNavigation() { EnsureWinNavigation(); }
+
+    // BACK (to the main menu) on the win and lose screens, and the black veil behind the game mode window.
+    static void EnsureBackButtonsAndFade()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        var menu = Object.FindFirstObjectByType<GameModeMenu>();
+        if (view == null || view.winTitle == null || view.loseButtons == null || menu == null || menu.window == null) return;
+
+        var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+        var box = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"); // rounded, sliced
+
+        Button MakeButton(string name, Transform parent, Vector2 anchor, Vector2 pos, Vector2 size, Color color, int fontSize, out TMPro.TMP_Text label)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.sprite = box; img.type = Image.Type.Sliced; img.color = Color.white;
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img;
+            var colors = btn.colors;
+            colors.normalColor = color;
+            colors.highlightedColor = Color.Lerp(color, Color.white, 0.2f);
+            colors.pressedColor = Color.Lerp(color, Color.black, 0.25f);
+            colors.selectedColor = color;
+            colors.disabledColor = new Color(color.r, color.g, color.b, 0.45f);
+            btn.colors = colors;
+
+            var textGo = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(Outline));
+            textGo.transform.SetParent(go.transform, false);
+            var trt = (RectTransform)textGo.transform;
+            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+            trt.offsetMin = new Vector2(8f, 0f); trt.offsetMax = new Vector2(-8f, 0f);
+            var lt = textGo.GetComponent<Text>();
+            lt.font = font; lt.fontSize = fontSize; lt.color = Color.white; lt.alignment = TextAnchor.MiddleCenter;
+            lt.raycastTarget = false; lt.supportRichText = false;
+            lt.horizontalOverflow = HorizontalWrapMode.Overflow; lt.verticalOverflow = VerticalWrapMode.Overflow;
+            lt.text = "BACK";
+            var o = textGo.GetComponent<Outline>(); o.effectColor = new Color(0f, 0f, 0f, 0.55f); o.effectDistance = new Vector2(2f, -2f);
+            label = TmpConvert.Convert(lt);
+            label.enableAutoSizing = true; label.fontSizeMin = 8; label.fontSizeMax = fontSize;
+            return btn;
+        }
+
+        var blue = new Color(0.18f, 0.5f, 0.87f);
+        if (view.winBackButton == null)
+        {
+            view.winBackButton = MakeButton("Back", view.winTitle.transform, new Vector2(0.5f, 0.1f), new Vector2(0f, -84f), new Vector2(200f, 58f), blue, 28, out view.winBackLabel);
+            EditorUtility.SetDirty(view);
+        }
+        if (view.loseBackButton == null)
+        {
+            view.loseBackButton = MakeButton("Back", view.loseButtons.transform, new Vector2(0.5f, 0.5f), new Vector2(0f, -104f), new Vector2(190f, 52f), blue, 26, out view.loseBackLabel);
+            EditorUtility.SetDirty(view);
+        }
+        if (menu.fade == null)
+        {
+            var go = new GameObject("Fade", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(menu.root.transform, false);
+            Stretch((RectTransform)go.transform);
+            var img = go.GetComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0f); img.raycastTarget = true; // black veil: blocks every click behind the window
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img; btn.transition = Selectable.Transition.None;
+            go.transform.SetAsFirstSibling();
+            go.SetActive(false);
+            menu.fade = img;
+            EditorUtility.SetDirty(menu);
+        }
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Back buttons (win / lose screens) and the game mode fade added.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Back Buttons And Fade")]
+    public static void AddBackButtonsAndFade() { EnsureBackButtonsAndFade(); }
 
     // Settings: the gear button (top right) and a full-screen window on a calm sand -> sea gradient with the match rules and the sound switches.
     static void EnsureSettingsWindow()
@@ -1410,7 +1486,7 @@ public static class ProjectSetup
     public static void AddLandingAlert() { EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); EnsureWinNavigation(); EnsureSettingsWindow(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); EnsureWinNavigation(); EnsureBackButtonsAndFade(); EnsureSettingsWindow(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()

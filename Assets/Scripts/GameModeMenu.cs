@@ -30,9 +30,11 @@ public class GameModeMenu : MonoBehaviour
     [Tooltip("Picture of the Tournament button in each language (English, Portuguese, Spanish).")]
     public Sprite[] tournamentSprites = new Sprite[3];
     public Button onlineButton;
-    [Tooltip("BACK: closes the window.")]
-    public Button backButton;
-    public TMP_Text backLabel;
+    [Tooltip("Black veil behind the window: dims everything and blocks every click behind it (tapping it closes the window).")]
+    public Image fade;
+    [Range(0f, 1f)] public float fadeAlpha = 0.65f;
+    [Tooltip("Sorting order of the veil; the window is drawn one above it, so both cover the rest of the HUD.")]
+    public int fadeSortingOrder = 50;
     [Tooltip("How much of the window is on screen when it is open (0.5 = half of it; the other half stays off the left edge).")]
     [Range(0.3f, 1f)] public float visibleFraction = 0.5f;
     [Tooltip("Thickness of the window's frame (canvas units). The three buttons are centred in the space that is on screen and inside the frame.")]
@@ -51,6 +53,7 @@ public class GameModeMenu : MonoBehaviour
     public event Action<GameMode> ModeSelected;
 
     float velocity;
+    CanvasGroup windowGroup;
     float currentX;
     Vector3 openButtonScale = Vector3.one;
     Vector3 modeLabelScale = Vector3.one;
@@ -68,7 +71,19 @@ public class GameModeMenu : MonoBehaviour
         Wire(trainingButton, GameMode.Training);
         Wire(tournamentButton, GameMode.Tournament);
         Wire(onlineButton, GameMode.Online);
-        if (backButton != null) { backButton.onClick.RemoveAllListeners(); backButton.onClick.AddListener(CloseWindow); }
+        if (fade != null)
+        {
+            var fadeButton = fade.GetComponent<Button>();
+            if (fadeButton != null) { fadeButton.onClick.RemoveAllListeners(); fadeButton.onClick.AddListener(CloseWindow); }
+            Overlay(fade.gameObject, fadeSortingOrder);
+            fade.gameObject.SetActive(false);
+        }
+        if (window != null)
+        {
+            Overlay(window.gameObject, fadeSortingOrder + 1);
+            windowGroup = window.GetComponent<CanvasGroup>();
+            if (windowGroup == null) windowGroup = window.gameObject.AddComponent<CanvasGroup>();
+        }
         CenterButtons();
         Refresh();
         currentX = ClosedX;
@@ -81,7 +96,7 @@ public class GameModeMenu : MonoBehaviour
 
     void CenterButtons()
     {
-        foreach (var b in new[] { trainingButton, tournamentButton, onlineButton, backButton })
+        foreach (var b in new[] { trainingButton, tournamentButton, onlineButton })
         {
             if (b == null) continue;
             var rt = (RectTransform)b.transform;
@@ -93,6 +108,16 @@ public class GameModeMenu : MonoBehaviour
     void OnValidate()
     {
         if (window != null) CenterButtons(); // keeps them centred while the size / visible part / frame are tweaked in the inspector
+    }
+
+    // Draws the object (and its children) above the rest of the HUD: its own canvas with an override sorting order.
+    static void Overlay(GameObject go, int order)
+    {
+        var canvas = go.GetComponent<Canvas>();
+        if (canvas == null) canvas = go.AddComponent<Canvas>();
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = order;
+        if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();
     }
 
     void Wire(Button b, GameMode mode)
@@ -171,12 +196,23 @@ public class GameModeMenu : MonoBehaviour
         }
         window.gameObject.SetActive(WindowOpen || currentX > ClosedX + 1f); // nothing is drawn while the window is parked off screen
 
+        bool windowShown = WindowOpen || currentX > ClosedX + 1f;
+        if (fade != null)
+        {
+            // The veil follows the window: it darkens while the window slides in and lets go while it slides out.
+            float progress = Mathf.Clamp01((currentX - ClosedX) / Mathf.Max(1f, OpenX - ClosedX));
+            if (fade.gameObject.activeSelf != windowShown) fade.gameObject.SetActive(windowShown);
+            var c = fade.color; c.a = fadeAlpha * progress; fade.color = c;
+            fade.raycastTarget = WindowOpen; // while the window slides out the veil is only a picture: clicks already reach what is behind it
+        }
+
+        if (windowGroup != null) windowGroup.blocksRaycasts = WindowOpen; // same for the window itself
+
+        // The round button stays active under the veil; it breathes a little while the window is closed.
         if (openButton != null)
         {
-            // The window covers the round button: it is hidden while the window is open or still sliding, and breathes a little otherwise.
-            bool windowShown = WindowOpen || currentX > ClosedX + 1f;
-            if (openButton.gameObject.activeSelf == windowShown) openButton.gameObject.SetActive(!windowShown);
             if (!windowShown && pulse > 0f) openButton.transform.localScale = openButtonScale * (1f + pulse * Mathf.Sin(Time.unscaledTime * 3f));
+            else if (windowShown) openButton.transform.localScale = openButtonScale;
         }
     }
 
@@ -186,7 +222,6 @@ public class GameModeMenu : MonoBehaviour
         int lang = (int)I18n.Current;
         if (lang == shownLanguage) return;
         shownLanguage = lang;
-        if (backLabel != null) backLabel.text = I18n.Tr("BACK");
         SetLanguageSprite(openButton, openButtonSprites, lang);
         SetLanguageSprite(trainingButton, trainingSprites, lang);
         SetLanguageSprite(tournamentButton, tournamentSprites, lang);
