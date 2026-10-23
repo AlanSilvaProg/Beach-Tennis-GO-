@@ -6,13 +6,14 @@ outro arquivo ser baixado (sem requisições extras):
   - Thumb.jpg: reduz para 64 px (o fundo é desfocado e esticado em tela cheia, então não precisa de mais) -> ~3 KB
 Uso: scripts/build-webgl-template.py   (precisa do macOS `sips` e do `cwebp`: brew install webp)
 Rode de novo ao trocar Sprites/Logo.png ou Sprites/Thumb.jpg."""
-import base64, os, struct, subprocess, sys, tempfile
+import base64, os, shutil, struct, subprocess, sys, tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LOGO = os.path.join(ROOT, "Assets", "Sprites", "Logo.png")
 THUMB = os.path.join(ROOT, "Assets", "Sprites", "Thumb.jpg")
 TEMPLATE = os.path.join(ROOT, "scripts", "webgl-template", "index.template.html")
 OUT = os.path.join(ROOT, "Assets", "WebGLTemplates", "BeachTennis", "index.html")
+JSON_SRC = os.path.join(ROOT, "scripts", "webgl-template", "index.json")  # Poki builds the page on poki.com from this file
 LOGO_WIDTH = 360
 THUMB_SIZE = 64
 
@@ -58,6 +59,7 @@ def main():
                 .replace("%%LOGO_W%%", str(LOGO_WIDTH)).replace("%%LOGO_H%%", str(logo_h)))
         os.makedirs(os.path.dirname(OUT), exist_ok=True)
         open(OUT, "w", encoding="utf-8").write(html)
+        shutil.copyfile(JSON_SRC, os.path.join(os.path.dirname(OUT), "index.json"))
         print("logo %dx%d (crop %d,%d %dx%d) = %d bytes; thumb = %d bytes; index.html = %d bytes" %
               (LOGO_WIDTH, logo_h, x, y, w, h, os.path.getsize(webp), os.path.getsize(thumb), os.path.getsize(OUT)))
 

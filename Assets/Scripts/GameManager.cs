@@ -93,7 +93,7 @@ public class GameManager : MonoBehaviour
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
-    bool loseLabelsSet, winLabelsSet;
+    bool loseLabelsSet, winLabelsSet, namesSet;
     float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
@@ -150,7 +150,7 @@ public class GameManager : MonoBehaviour
                 if (Pressed() && !PointerOverUi())
                 {
                     if (menu != null && menu.WindowOpen) menu.CloseWindow();
-                    else if (menu == null || menu.Mode == GameMode.Training) StartMatch(); // Training is the only mode so far
+                    else if (menu == null || menu.Mode == GameMode.Training) BeginMatch(); // Training is the only mode so far
                 }
                 break;
             case State.Serving:
@@ -205,6 +205,7 @@ public class GameManager : MonoBehaviour
 
     void UpdateHud()
     {
+        if (!namesSet) { hud.SetNames(I18n.Tr("PLAYER"), "CPU"); namesSet = true; }
         hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
         if (menu != null) menu.SetVisible(state == State.Menu);
         bool wonMatch = state == State.MatchOver && playerScore > aiScore;
@@ -217,6 +218,12 @@ public class GameManager : MonoBehaviour
         hud.SetTime(matchTime);
         if (level != infoLevel) { infoLevel = level; info = I18n.Tr("You  vs  CPU   |   Level {0}", level); }
         hud.Info = info;
+    }
+
+    // Poki: an ad break comes before every start of gameplay (it only plays when Poki decides it is time), then the match starts.
+    void BeginMatch()
+    {
+        if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
 
     bool CanUseLoseButtons => state == State.MatchOver && aiScore > playerScore && stateTimer > matchOverInputDelay && !PokiService.AdPlaying;

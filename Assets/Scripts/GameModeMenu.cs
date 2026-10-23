@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public enum GameMode { Training, Tournament, Online }
 
@@ -15,13 +16,19 @@ public class GameModeMenu : MonoBehaviour
     [Tooltip("Everything of the menu; hidden while a match is on.")]
     public GameObject root;
     [Tooltip("Name of the current mode, at the top of the screen while the menu is up.")]
-    public Text modeLabel;
+    public TMP_Text modeLabel;
     public Button openButton;
+    [Tooltip("Picture of the round Game mode button in each language, in the order English, Portuguese, Spanish.")]
+    public Sprite[] openButtonSprites = new Sprite[3];
 
     [Header("Selection window")]
     public RectTransform window;
     public Button trainingButton;
+    [Tooltip("Picture of the Training button in each language (English, Portuguese, Spanish).")]
+    public Sprite[] trainingSprites = new Sprite[3];
     public Button tournamentButton;
+    [Tooltip("Picture of the Tournament button in each language (English, Portuguese, Spanish).")]
+    public Sprite[] tournamentSprites = new Sprite[3];
     public Button onlineButton;
     [Tooltip("How much of the window is on screen when it is open (0.5 = half of it; the other half stays off the left edge).")]
     [Range(0.3f, 1f)] public float visibleFraction = 0.5f;
@@ -33,6 +40,8 @@ public class GameModeMenu : MonoBehaviour
     public float selectedScale = 1.1f;
     [Tooltip("The Game mode button breathes a little while the window is closed.")]
     [Range(0f, 0.1f)] public float pulse = 0.04f;
+    [Tooltip("The mode name at the top (\"TRAINING MODE\") pulses gently.")]
+    [Range(0f, 0.1f)] public float labelPulse = 0.035f;
 
     public GameMode Mode { get; private set; } = GameMode.Training;
     public bool WindowOpen { get; private set; }
@@ -41,9 +50,12 @@ public class GameModeMenu : MonoBehaviour
     float velocity;
     float currentX;
     Vector3 openButtonScale = Vector3.one;
+    Vector3 modeLabelScale = Vector3.one;
+    int shownLanguage = -1;
 
     void Awake()
     {
+        if (modeLabel != null) modeLabelScale = modeLabel.transform.localScale;
         if (openButton != null)
         {
             openButtonScale = openButton.transform.localScale;
@@ -140,6 +152,8 @@ public class GameModeMenu : MonoBehaviour
 
     void Update()
     {
+        ApplyLanguageSprite();
+        if (modeLabel != null) modeLabel.transform.localScale = modeLabelScale * (1f + labelPulse * Mathf.Sin(Time.unscaledTime * 2.5f));
         if (window == null) return;
         float target = WindowOpen ? OpenX : ClosedX;
         if (Mathf.Abs(currentX - target) > 0.05f || Mathf.Abs(velocity) > 0.05f)
@@ -156,6 +170,23 @@ public class GameModeMenu : MonoBehaviour
             if (openButton.gameObject.activeSelf == windowShown) openButton.gameObject.SetActive(!windowShown);
             if (!windowShown && pulse > 0f) openButton.transform.localScale = openButtonScale * (1f + pulse * Mathf.Sin(Time.unscaledTime * 3f));
         }
+    }
+
+    // The buttons have their name written on them, so their pictures follow the language (which can be set after Awake).
+    void ApplyLanguageSprite()
+    {
+        int lang = (int)I18n.Current;
+        if (lang == shownLanguage) return;
+        shownLanguage = lang;
+        SetLanguageSprite(openButton, openButtonSprites, lang);
+        SetLanguageSprite(trainingButton, trainingSprites, lang);
+        SetLanguageSprite(tournamentButton, tournamentSprites, lang);
+    }
+
+    static void SetLanguageSprite(Button button, Sprite[] sprites, int lang)
+    {
+        if (button == null || sprites == null || lang >= sprites.Length || sprites[lang] == null || button.image == null) return;
+        button.image.sprite = sprites[lang];
     }
 
     void ApplyX()

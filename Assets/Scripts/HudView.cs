@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 // HUD: result board (player points, CPU points, match time), info line and centre banner. The Canvas and everything on it live in the
 // scene (object "HUD"); edit font, size, colour and position directly on them. This script only sets the text.
@@ -11,32 +12,35 @@ public class HudView : MonoBehaviour
     [Tooltip("Hangs the board from two chains and animates it in and out through the top of the screen. When empty the board is switched on / off.")]
     public HangingSign scoreboardSign;
     [Tooltip("Player points: tens, units.")]
-    public Text[] playerDigits = new Text[2];
+    public TMP_Text[] playerDigits = new TMP_Text[2];
     [Tooltip("CPU points: tens, units.")]
-    public Text[] npcDigits = new Text[2];
+    public TMP_Text[] npcDigits = new TMP_Text[2];
+    [Tooltip("Names above the two scores on the board.")]
+    public TMP_Text playerNameLabel;
+    public TMP_Text npcNameLabel;
     [Tooltip("Match time as HH:MM:SS: hours tens, hours units, minutes tens, minutes units, seconds tens, seconds units.")]
-    public Text[] timeDigits = new Text[6];
+    public TMP_Text[] timeDigits = new TMP_Text[6];
 
     [Header("Lose screen buttons (Restart = standard, Retry = rewarded ad)")]
     public GameObject loseButtons;
     public Button restartButton;
     public Button retryButton;
-    public Text restartLabel;
-    public Text retryLabel;
+    public TMP_Text restartLabel;
+    public TMP_Text retryLabel;
     public event System.Action RestartClicked;
     public event System.Action RetryClicked;
 
     [Header("Win title (big two-line text shown when the match is won)")]
     public GameObject winTitle;
-    public Text winLine1;     // white
-    public Text winLine2;     // yellow
-    public Text winHint;      // "click / tap for next level", part of the same centred group
+    public TMP_Text winLine1;     // white
+    public TMP_Text winLine2;     // yellow
+    public TMP_Text winHint;      // "click / tap for next level", part of the same centred group
     [Tooltip("Seconds of the pop-in animation.")]
     public float winPopTime = 0.45f;
 
     [Header("Text")]
-    public Text infoText;
-    public Text bannerText;
+    public TMP_Text infoText;
+    public TMP_Text bannerText;
 
     string info = "", banner = "";
     int player = -1, npc = -1, shownSeconds = -1;
@@ -84,7 +88,7 @@ public class HudView : MonoBehaviour
     }
 
     // Writes `value` (zero padded to `count` digits) into digits[start ...], one character per Text.
-    static void SetDigits(Text[] digits, int start, int value, int count)
+    static void SetDigits(TMP_Text[] digits, int start, int value, int count)
     {
         if (digits == null) return;
         for (int i = 0; i < count; i++)
@@ -118,6 +122,12 @@ public class HudView : MonoBehaviour
         if (winTitle == null || winTitle.activeSelf == visible) return;
         winTitle.SetActive(visible);
         if (visible) { winShownAt = Time.unscaledTime; winTitle.transform.localScale = Vector3.zero; }
+    }
+
+    public void SetNames(string player, string npc)
+    {
+        Apply(playerNameLabel, player);
+        Apply(npcNameLabel, npc);
     }
 
     public void SetWinLabels(string line1, string line2, string hint)
@@ -154,7 +164,7 @@ public class HudView : MonoBehaviour
         if (infoText != null) infoText.enabled = visible;
     }
 
-    static void Apply(Text t, string value)
+    static void Apply(TMP_Text t, string value)
     {
         if (t != null) t.text = value;
     }

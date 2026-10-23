@@ -265,7 +265,7 @@ public static class ProjectSetup
         scaler.matchWidthOrHeight = 1f; // scale with the height
 
         // Full-width strips; `top` is the distance from the top edge and `anchorY` the anchor height (0..1).
-        Text MakeText(string name, int size, float anchorY, float top, float height)
+        TMPro.TMP_Text MakeText(string name, int size, float anchorY, float top, float height)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(Outline));
             go.transform.SetParent(canvasGo.transform, false);
@@ -287,7 +287,7 @@ public static class ProjectSetup
             var o = go.GetComponent<Outline>();
             o.effectColor = new Color(0f, 0f, 0f, 0.7f);
             o.effectDistance = new Vector2(2f, -2f);
-            return t;
+            return TmpConvert.Convert(t);
         }
 
         view.infoText = MakeText("Info", 24, 1f, 140f, 30f); // below the result board
@@ -513,9 +513,20 @@ public static class ProjectSetup
         var canvas = view.infoText.canvas;
 
         var windowSprite = ConfigureUiSprite("Assets/Sprites/background-game-mode.png", new Vector4(104f, 104f, 104f, 104f));
-        var gameModeSprite = ConfigureUiSprite("Assets/Sprites/game-mode-button.png", Vector4.zero);
-        var trainingSprite = ConfigureUiSprite("Assets/Sprites/training-mode-button.png", Vector4.zero);
-        var tournamentSprite = ConfigureUiSprite("Assets/Sprites/tournament-button.png", Vector4.zero);
+        // One picture per language, from sheets sliced in the importer (<prefix>-en / -pt / -es).
+        Sprite[] LangSprites(string sheet, string prefix)
+        {
+            var found = new Sprite[3];
+            foreach (var o in AssetDatabase.LoadAllAssetsAtPath(sheet))
+                if (o is Sprite sp) { int i = System.Array.IndexOf(new[] { prefix + "-en", prefix + "-pt", prefix + "-es" }, sp.name); if (i >= 0) found[i] = sp; }
+            return found;
+        }
+        var gameModeSprites = LangSprites("Assets/Sprites/game-mode-lang-buttons.png", "game-mode");
+        var trainingSprites = LangSprites("Assets/Sprites/training-mode-lang-button.png", "training");
+        var tournamentSprites = LangSprites("Assets/Sprites/tournament-lang-button.png", "tournament");
+        var gameModeSprite = gameModeSprites[0];
+        var trainingSprite = trainingSprites[0];
+        var tournamentSprite = tournamentSprites[0];
         var onlineSprite = ConfigureUiSprite("Assets/Sprites/online-mode-button.png", Vector4.zero);
         var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
 
@@ -530,18 +541,19 @@ public static class ProjectSetup
         menu.root = root;
 
         // Current mode, top centre.
-        var labelGo = new GameObject("ModeLabel", typeof(RectTransform), typeof(Text), typeof(Outline));
+        var labelGo = new GameObject("ModeLabel", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
         labelGo.transform.SetParent(root.transform, false);
         var lrt = (RectTransform)labelGo.transform;
         lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 1f);
-        lrt.pivot = new Vector2(0.5f, 1f);
-        lrt.anchoredPosition = new Vector2(0f, -22f);
-        lrt.sizeDelta = new Vector2(760f, 64f);
-        var label = labelGo.GetComponent<Text>();
-        label.font = font; label.fontSize = 50; label.color = Color.white; label.alignment = TextAnchor.MiddleCenter;
-        label.raycastTarget = false; label.supportRichText = false; label.text = "TRAINING MODE";
-        label.horizontalOverflow = HorizontalWrapMode.Overflow; label.verticalOverflow = VerticalWrapMode.Overflow;
-        var lo = labelGo.GetComponent<Outline>(); lo.effectColor = new Color(0f, 0.1f, 0.25f, 0.85f); lo.effectDistance = new Vector2(3f, -3f);
+        lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.anchoredPosition = new Vector2(0f, -85f);
+        lrt.sizeDelta = new Vector2(880f, 120f);
+        var label = labelGo.GetComponent<TMPro.TextMeshProUGUI>();
+        label.font = AssetDatabase.LoadAssetAtPath<TMPro.TMP_FontAsset>("Assets/Fonts/LilitaOne-Regular SDF.asset");
+        label.enableAutoSizing = true; label.fontSizeMin = 12; label.fontSizeMax = 60; label.enableWordWrapping = false;
+        label.color = Color.white; label.alignment = TMPro.TextAlignmentOptions.Center;
+        label.raycastTarget = false; label.richText = false; label.text = "TRAINING MODE";
+        label.outlineColor = new Color(0f, 0.1f, 0.25f, 0.85f); label.outlineWidth = 0.2f;
         menu.modeLabel = label;
 
         Button MakeButton(string name, Transform parent, Vector2 anchor, Vector2 pos, Vector2 size, Sprite sprite)
@@ -565,7 +577,8 @@ public static class ProjectSetup
         }
 
         // Round "Game mode" button, bottom left.
-        menu.openButton = MakeButton("GameModeButton", root.transform, new Vector2(0f, 0f), new Vector2(85f, 85f), new Vector2(120f, 120f), gameModeSprite);
+        menu.openButton = MakeButton("GameModeButton", root.transform, new Vector2(0f, 0f), new Vector2(85f, 85f), new Vector2(90f, 90f), gameModeSprite);
+        menu.openButtonSprites = gameModeSprites; menu.trainingSprites = trainingSprites; menu.tournamentSprites = tournamentSprites;
 
         // Selection window: nine-slice background; parked off screen to the left (the script slides it in).
         var winGo = new GameObject("ModeWindow", typeof(RectTransform), typeof(Image));
@@ -621,7 +634,7 @@ public static class ProjectSetup
             rrt.sizeDelta = new Vector2(-40f, 300f);
 
             // Text of the group: yMin..yMax = share of the group's height; `lettering` = gradient + thick outline (like the game mode buttons).
-            Text Line(string name, float yMin, float yMax, int maxSize, Color top, Color bottom, bool lettering)
+            TMPro.TMP_Text Line(string name, float yMin, float yMax, int maxSize, Color top, Color bottom, bool lettering)
             {
                 var go = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(UiTextGradient), typeof(Outline), typeof(Outline), typeof(Shadow));
                 go.transform.SetParent(root.transform, false);
@@ -640,7 +653,7 @@ public static class ProjectSetup
                 outlines[0].effectColor = navy; outlines[0].effectDistance = lettering ? new Vector2(6f, -6f) : new Vector2(3f, -3f);
                 outlines[1].effectColor = navy; outlines[1].effectDistance = lettering ? new Vector2(3f, -3f) : new Vector2(1.5f, -1.5f);
                 var sh = go.GetComponent<Shadow>(); sh.effectColor = new Color(0f, 0f, 0f, 0.4f); sh.effectDistance = new Vector2(0f, lettering ? -10f : -5f);
-                return t;
+                return TmpConvert.Convert(t);
             }
             view.winLine1 = Line("Line1", 0.64f, 1f, 105, Color.white, new Color(0.72f, 0.88f, 1f), true);                    // white (to light blue)
             view.winLine2 = Line("Line2", 0.24f, 0.64f, 135, new Color(1f, 0.93f, 0.35f), new Color(1f, 0.55f, 0.05f), true); // yellow (to orange)
@@ -900,7 +913,7 @@ public static class ProjectSetup
         rootRt.sizeDelta = new Vector2(260f, 150f);
         rootRt.anchoredPosition = Vector2.zero;
 
-        Button MakeButton(string name, Vector2 pos, Vector2 size, Color color, int fontSize, out Text label, Sprite iconSprite)
+        Button MakeButton(string name, Vector2 pos, Vector2 size, Color color, int fontSize, out TMPro.TMP_Text label, Sprite iconSprite)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(root.transform, false);
@@ -926,12 +939,13 @@ public static class ProjectSetup
             var trt = (RectTransform)textGo.transform;
             trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
             trt.offsetMin = new Vector2(iconSprite != null ? 50f : 8f, 0f); trt.offsetMax = new Vector2(-8f, 0f);
-            label = textGo.GetComponent<Text>();
-            label.font = font; label.fontSize = fontSize; label.color = Color.white; label.alignment = TextAnchor.MiddleCenter;
-            label.raycastTarget = false; label.supportRichText = false;
-            label.horizontalOverflow = HorizontalWrapMode.Overflow; label.verticalOverflow = VerticalWrapMode.Overflow;
-            label.text = name.ToUpperInvariant();
+            var lt = textGo.GetComponent<Text>();
+            lt.font = font; lt.fontSize = fontSize; lt.color = Color.white; lt.alignment = TextAnchor.MiddleCenter;
+            lt.raycastTarget = false; lt.supportRichText = false;
+            lt.horizontalOverflow = HorizontalWrapMode.Overflow; lt.verticalOverflow = VerticalWrapMode.Overflow;
+            lt.text = name.ToUpperInvariant();
             var o = textGo.GetComponent<Outline>(); o.effectColor = new Color(0f, 0f, 0f, 0.55f); o.effectDistance = new Vector2(2f, -2f);
+            label = TmpConvert.Convert(lt);
 
             if (iconSprite != null)
             {
@@ -1060,7 +1074,7 @@ public static class ProjectSetup
         root = view.board.transform;
 
         // Two single-digit texts around a pair centre (cx, cy), in image pixels; `old` (a two-digit text) is replaced if it exists.
-        Text[] Pair(string name, float cx, float cy, float dx, float w, float h, int size, Color color)
+        TMPro.TMP_Text[] Pair(string name, float cx, float cy, float dx, float w, float h, int size, Color color)
         {
             var old = root.Find(name);
             if (old != null)
@@ -1071,7 +1085,7 @@ public static class ProjectSetup
                 if (ot != null) { size = ot.fontSize; color = ot.color; if (ot.font != null) font = ot.font; }
                 Object.DestroyImmediate(old.gameObject);
             }
-            var pair = new Text[2];
+            var pair = new TMPro.TMP_Text[2];
             for (int i = 0; i < 2; i++)
             {
                 var go = new GameObject(name + (i == 0 ? "_Tens" : "_Units"), typeof(RectTransform), typeof(Text));
@@ -1086,7 +1100,7 @@ public static class ProjectSetup
                 t.alignment = TextAnchor.MiddleCenter;
                 t.raycastTarget = false; t.supportRichText = false;
                 t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;
-                pair[i] = t;
+                pair[i] = TmpConvert.Convert(t);
             }
             return pair;
         }

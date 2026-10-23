@@ -1,18 +1,18 @@
 using System;
-using System.Runtime.InteropServices;
 using UnityEngine;
 
-// Poki SDK integration (WebGL). The SDK script and the page-side logic live in the WebGL template; this class is the game's side:
-//   GameplayStart()   the player started playing (first input of a match)
-//   GameplayStop()    gameplay was interrupted (match over, ad, focus lost is handled by the page)
-//   CommercialBreak() ad before heading back into gameplay (here: from the match-over screen into the next match)
-// Everything is safe without the SDK (editor, other hosts, ad blocker): the break simply finishes at once, the game never waits for it.
-// While an ad plays the game is muted and ignores input (`AdPlaying`); no SDK event is sent in that time.
-// The object must be named "PokiService": the page calls back with SendMessage("PokiService", ...).
+// The game's side of the Poki SDK, on top of Poki's official wrapper (PokiUnitySDK.cs + Plugins/WebGL/PokiSDKBridge.jslib, from the Poki Unity
+// package; on Poki the page and the SDK calls come from their loader, built from the template's index.json).
+//   GameplayStart()   the player started playing (first input of a match, every return to gameplay)
+//   GameplayStop()    gameplay was interrupted (match over, ad, window lost focus)
+//   CommercialBreak() ad before heading back into gameplay (every start of a match: Poki decides whether an ad really plays)
+//   RewardedBreak()   opt-in rewarded ad
+// Rules kept here, on top of the wrapper: the gameplay events never repeat and never fire during an ad or while the page is hidden; the game is
+// muted and ignores input during an ad (`AdPlaying`); an ad that never reports back is cut after `breakTimeout`.
+// Everything is safe without the SDK (editor, other hosts, ad blocker): a break simply finishes at once.
 public class PokiService : MonoBehaviour
 {
-    // Poki id of this game. The HTML5 SDK calls used today (init, loading, gameplay, commercialBreak) do not take it; it is the key for
-    // Poki's per-game services (AUDS user data / leaderboard) if they are added later.
+    // Poki id of this game. The SDK calls used here do not take it; it is the key for Poki's per-game services (AUDS) if they are added later.
     public const string GameId = "761a602c-88ba-435a-8df8-d5fdbe420364";
 
     public static bool AdPlaying { get; private set; }
@@ -20,53 +20,67 @@ public class PokiService : MonoBehaviour
     [Tooltip("Safety net for a break that never reports back (s, real time).")]
     public float breakTimeout = 90f;
 
-#if UNITY_WEBGL && !UNITY_EDITOR
-    [DllImport("__Internal")] static extern void PokiGameplayStart();
-    [DllImport("__Internal")] static extern void PokiGameplayStop();
-    [DllImport("__Internal")] static extern int PokiCommercialBreak();
-    [DllImport("__Internal")] static extern int PokiRewardedBreak();
-#else
-    static void PokiGameplayStart() { }
-    static void PokiGameplayStop() { }
-    static int PokiCommercialBreak() { return 0; }
-    static int PokiRewardedBreak() { return 0; }
-#endif
-
-    bool playing;
+    bool wantPlaying;      // the game wants gameplay to be on
+    bool hidden;           // the page / window lost focus
+    bool sentPlaying;      // what Poki was told last
+    bool loadingFinishedSent;
     float breakStartedAt;
     float volumeBeforeAd = 1f;
     Action onBreakDone;
-    bool commercialRunning;
     Action<bool> onRewardedDone;
 
     // Static state survives a Play without domain reload.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetStatics() { AdPlaying = false; } // not named Reset: MonoBehaviour has a magic Reset()
 
-    public void GameplayStart()
+    void Awake()
     {
-        if (AdPlaying || playing) return; // never twice in a row, never during an ad
-        playing = true;
-        PokiGameplayStart();
+        var sdk = PokiUnitySDK.Instance;
+        sdk.gameLoadingStart();
+        try { sdk.init(); } catch (PokiException) { } // already initialising (e.g. a second scene load)
     }
 
-    public void GameplayStop()
+    void Start()
     {
-        if (!playing) return;
-        playing = false;
-        PokiGameplayStop();
+        // Everything of the first scene is up: this is "done loading".
+        if (!loadingFinishedSent)
+        {
+            loadingFinishedSent = true;
+            PokiUnitySDK.Instance.gameLoadingFinished();
+        }
     }
 
+    // ---- gameplay events: derived from "the game wants to play" + "the page is visible" + "no ad", sent only when the result changes ----
+    public void GameplayStart() { wantPlaying = true; Sync(); }
+    public void GameplayStop() { wantPlaying = false; Sync(); }
+
+    void OnApplicationFocus(bool focus) { hidden = !focus; Sync(); }
+    void OnApplicationPause(bool paused) { hidden = paused; Sync(); }
+
+    void Sync()
+    {
+        bool target = wantPlaying && !hidden && !AdPlaying;
+        if (target == sentPlaying) return;
+        sentPlaying = target;
+        if (target) PokiUnitySDK.Instance.gameplayStart(); else PokiUnitySDK.Instance.gameplayStop();
+    }
+
+    // ---- ads ----
     // `done` runs when the break is over (immediately when there is no ad). Always called, exactly once.
     public void CommercialBreak(Action done)
     {
         if (AdPlaying) return; // already waiting for one
         GameplayStop();
+        BeginAd();
+#if UNITY_EDITOR
+        EndAd();
+        done?.Invoke();
+#else
         onBreakDone = done;
-        commercialRunning = true;
-        AdPlaying = true;
-        breakStartedAt = Time.realtimeSinceStartup;
-        if (PokiCommercialBreak() == 0) Finish();
+        var sdk = PokiUnitySDK.Instance;
+        sdk.commercialBreakCallBack = OnCommercialBreakFinished;
+        sdk.commercialBreak(); // finishes at once (through the callback) when the SDK is not ready or an ad blocker is on
+#endif
     }
 
     // Rewarded ad: `done(true)` only when the player watched it to the end. Without an ad (not in Poki, ad blocker, error) it is `done(false)`:
@@ -75,63 +89,62 @@ public class PokiService : MonoBehaviour
     {
         if (AdPlaying) return; // never two at the same time (also stops a double click from paying twice)
         GameplayStop();
+        BeginAd();
 #if UNITY_EDITOR
+        EndAd();
         done?.Invoke(true);
 #else
         onRewardedDone = done;
-        AdPlaying = true;
-        breakStartedAt = Time.realtimeSinceStartup;
-        if (PokiRewardedBreak() == 0) FinishRewarded(false);
+        var sdk = PokiUnitySDK.Instance;
+        sdk.rewardedBreakCallBack = OnRewardedBreakFinished;
+        sdk.rewardedBreak();
 #endif
     }
 
-    // ---- called by the page (SendMessage) ----
-    public void OnAdStarted()
+    void BeginAd()
     {
-        if (!AdPlaying) return;
+        AdPlaying = true;
+        breakStartedAt = Time.realtimeSinceStartup;
         volumeBeforeAd = AudioListener.volume > 0f ? AudioListener.volume : volumeBeforeAd;
-        AudioListener.volume = 0f; // audio is muted while the ad plays
+        AudioListener.volume = 0f; // muted for the whole break (disable input: see AdPlaying)
     }
 
-    public void OnBreakFinished()
+    void EndAd()
     {
-        if (AdPlaying && commercialRunning) Finish();
-    }
-
-    public void OnRewardedFinished(string result)
-    {
-        if (AdPlaying && onRewardedDone != null) FinishRewarded(result == "1");
-    }
-
-    void FinishRewarded(bool granted)
-    {
-        AudioListener.volume = volumeBeforeAd;
+        AudioListener.volume = SoundMuteButton.Muted ? 0f : volumeBeforeAd;
         AdPlaying = false;
-        var done = onRewardedDone;
-        onRewardedDone = null;
-        done?.Invoke(granted);
+        Sync(); // the page may have been hidden during the ad
     }
 
-    void Finish()
+    void OnCommercialBreakFinished()
     {
-        AudioListener.volume = volumeBeforeAd;
-        AdPlaying = false;
-        commercialRunning = false;
+        if (!AdPlaying || onBreakDone == null) return;
         var done = onBreakDone;
         onBreakDone = null;
-        done?.Invoke();
+        EndAd();
+        done();
+    }
+
+    void OnRewardedBreakFinished(bool withReward)
+    {
+        if (!AdPlaying || onRewardedDone == null) return;
+        var done = onRewardedDone;
+        onRewardedDone = null;
+        EndAd();
+        done(withReward);
     }
 
     void Update()
     {
-        if (AdPlaying && Time.realtimeSinceStartup - breakStartedAt > breakTimeout)
-        {
-            if (onRewardedDone != null) FinishRewarded(false); else Finish();
-        }
+        if (!AdPlaying || Time.realtimeSinceStartup - breakStartedAt <= breakTimeout) return;
+        // An ad that never reports back must not freeze the game.
+        if (onRewardedDone != null) OnRewardedBreakFinished(false);
+        else if (onBreakDone != null) OnCommercialBreakFinished();
+        else EndAd();
     }
 
     void OnDestroy()
     {
-        if (AdPlaying) { AudioListener.volume = volumeBeforeAd; AdPlaying = false; }
+        if (AdPlaying) { AudioListener.volume = SoundMuteButton.Muted ? 0f : volumeBeforeAd; AdPlaying = false; }
     }
 }
