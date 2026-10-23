@@ -18,7 +18,6 @@ public static class BuildScript
         if (string.IsNullOrEmpty(output)) output = DefaultOutput;
 
         VoiceManifest.Generate(); // voice file lists (StreamingAssets/Voice/<lang>/index.txt) must be current
-        ApplyPokiBuildSettings();
 
         var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
         if (scenes.Length == 0) { Fail("No enabled scenes in Build Settings."); return; }
@@ -39,19 +38,6 @@ public static class BuildScript
         }
         Debug.Log("WebGL build succeeded: " + output + " (" + (report.summary.totalSize / (1024 * 1024)) + " MB)");
         if (Application.isBatchMode) EditorApplication.Exit(0);
-    }
-
-    // Poki's build guidelines for Unity WebGL: no compression (Poki's servers compress), hashed file names (cache busting), the smallest exception
-    // support, engine code stripped, high managed stripping, data caching on. Set before every build so they cannot drift.
-    static void ApplyPokiBuildSettings()
-    {
-        PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
-        PlayerSettings.WebGL.decompressionFallback = false;
-        PlayerSettings.WebGL.nameFilesAsHashes = true;
-        PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.None;
-        PlayerSettings.WebGL.dataCaching = true;
-        PlayerSettings.stripEngineCode = true;
-        PlayerSettings.SetManagedStrippingLevel(UnityEditor.Build.NamedBuildTarget.WebGL, ManagedStrippingLevel.High);
     }
 
     static void Fail(string message)
