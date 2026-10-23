@@ -603,10 +603,12 @@ public static class ProjectSetup
         Debug.Log("[BeachTennisGO] Game mode menu added to the HUD.");
     }
 
-    static void Stretch(RectTransform rt)
+    static void Stretch(RectTransform rt) { Stretch(rt, 0f); }
+
+    static void Stretch(RectTransform rt, float margin)
     {
         rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        rt.offsetMin = new Vector2(margin, margin); rt.offsetMax = new Vector2(-margin, -margin);
     }
 
     [MenuItem("Tools/Beach Tennis GO/Add Game Mode Menu")]
@@ -657,7 +659,6 @@ public static class ProjectSetup
             }
             view.winLine1 = Line("Line1", 0.64f, 1f, 105, Color.white, new Color(0.72f, 0.88f, 1f), true);                    // white (to light blue)
             view.winLine2 = Line("Line2", 0.24f, 0.64f, 135, new Color(1f, 0.93f, 0.35f), new Color(1f, 0.55f, 0.05f), true); // yellow (to orange)
-            view.winHint = Line("Hint", 0f, 0.2f, 34, Color.white, Color.white, false);
             view.winTitle = root;
             root.SetActive(false);
             EditorUtility.SetDirty(view);
@@ -1117,6 +1118,236 @@ public static class ProjectSetup
         Debug.Log("[BeachTennisGO] Result board digits ready (" + (fresh ? "created" : "converted to one Text per digit") + ").");
     }
 
+    // Win screen: CONTINUE under the title (next level); the Game mode button's window gets a BACK button (closes it). Replaces the old "tap to continue" hint.
+    static void EnsureWinNavigation()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        var menu = Object.FindFirstObjectByType<GameModeMenu>();
+        if (view == null || view.winTitle == null || menu == null || menu.window == null) return;
+        if (view.winContinueButton != null && menu.backButton != null) return;
+
+        var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+        var box = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"); // rounded, sliced
+
+        Button MakeButton(string name, Transform parent, Vector2 anchor, Vector2 pos, Vector2 size, Color color, int fontSize, out TMPro.TMP_Text label)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.sprite = box; img.type = Image.Type.Sliced; img.color = Color.white;
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img;
+            var colors = btn.colors;
+            colors.normalColor = color;
+            colors.highlightedColor = Color.Lerp(color, Color.white, 0.2f);
+            colors.pressedColor = Color.Lerp(color, Color.black, 0.25f);
+            colors.selectedColor = color;
+            colors.disabledColor = new Color(color.r, color.g, color.b, 0.45f);
+            btn.colors = colors;
+
+            var textGo = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(Outline));
+            textGo.transform.SetParent(go.transform, false);
+            var trt = (RectTransform)textGo.transform;
+            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+            trt.offsetMin = new Vector2(8f, 0f); trt.offsetMax = new Vector2(-8f, 0f);
+            var lt = textGo.GetComponent<Text>();
+            lt.font = font; lt.fontSize = fontSize; lt.color = Color.white; lt.alignment = TextAnchor.MiddleCenter;
+            lt.raycastTarget = false; lt.supportRichText = false;
+            lt.horizontalOverflow = HorizontalWrapMode.Overflow; lt.verticalOverflow = VerticalWrapMode.Overflow;
+            lt.text = name.ToUpperInvariant();
+            var o = textGo.GetComponent<Outline>(); o.effectColor = new Color(0f, 0f, 0f, 0.55f); o.effectDistance = new Vector2(2f, -2f);
+            label = TmpConvert.Convert(lt);
+            label.enableAutoSizing = true; label.fontSizeMin = 8; label.fontSizeMax = fontSize;
+            return btn;
+        }
+
+        if (view.winContinueButton == null)
+        {
+            var hint = view.winTitle.transform.Find("Hint");
+            if (hint != null) Object.DestroyImmediate(hint.gameObject);
+            view.winContinueButton = MakeButton("Continue", view.winTitle.transform, new Vector2(0.5f, 0.1f), Vector2.zero, new Vector2(300f, 76f), new Color(0.2f, 0.66f, 0.3f), 34, out view.winContinueLabel);
+            EditorUtility.SetDirty(view);
+        }
+        if (menu.backButton == null)
+        {
+            menu.backButton = MakeButton("Back", menu.window, new Vector2(0f, 0.5f), new Vector2(0f, -205f), new Vector2(150f, 54f), new Color(0.18f, 0.5f, 0.87f), 28, out menu.backLabel);
+            EditorUtility.SetDirty(menu);
+        }
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Win screen buttons (Continue, Back) added.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Win Screen Buttons")]
+    public static void AddWinNavigation() { EnsureWinNavigation(); }
+
+    // Settings: the gear button (top right) and a full-screen window on a calm sand -> sea gradient with the match rules and the sound switches.
+    static void EnsureSettingsWindow()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (view == null || view.infoText == null || gm == null) return;
+        if (Object.FindFirstObjectByType<SettingsWindow>() != null) return;
+
+        var canvas = view.infoText.canvas.transform;
+        var font = AssetDatabase.LoadAssetAtPath<Font>(HudFontPath);
+        var box = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"); // rounded, sliced
+        var navy = new Color(0.03f, 0.12f, 0.38f, 1f);
+
+        // Calm background: the sunburst shader without rays, dashes or spin, in the colours of the beach (sand, sea, deep sea).
+        const string matPath = "Assets/Materials/SettingsBackground.mat";
+        var bgMat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+        if (bgMat == null)
+        {
+            bgMat = new Material(Shader.Find("BeachTennisGO/RaysBackground"));
+            bgMat.SetColor("_CenterColor", new Color(0.97f, 0.87f, 0.62f));
+            bgMat.SetColor("_MidColor", new Color(0.22f, 0.70f, 0.86f));
+            bgMat.SetColor("_EdgeColor", new Color(0.06f, 0.25f, 0.58f));
+            bgMat.SetFloat("_MidRadius", 0.45f);
+            bgMat.SetFloat("_RayStrength", 0f);
+            bgMat.SetFloat("_Spin", 0f);
+            bgMat.SetColor("_DashColor", new Color(1f, 1f, 1f, 0f));
+            AssetDatabase.CreateAsset(bgMat, matPath);
+        }
+
+        TMPro.TMP_Text MakeLabel(string name, Transform parent, int size, TMPro.TextAlignmentOptions align)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(Outline));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = font; t.fontSize = size; t.color = Color.white; t.alignment = TextAnchor.MiddleCenter; t.raycastTarget = false; t.supportRichText = false;
+            t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow; t.text = name;
+            var o = go.GetComponent<Outline>(); o.effectColor = navy; o.effectDistance = new Vector2(3f, -3f);
+            var tmp = TmpConvert.Convert(t);
+            tmp.alignment = align; tmp.enableAutoSizing = true; tmp.fontSizeMin = 8; tmp.fontSizeMax = size; tmp.enableWordWrapping = false;
+            return tmp;
+        }
+
+        Button MakeButton(string name, Transform parent, Color color, string label, int size, out TMPro.TMP_Text text)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.sprite = box; img.type = Image.Type.Sliced; img.color = Color.white;
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = img;
+            var colors = btn.colors;
+            colors.normalColor = color;
+            colors.highlightedColor = Color.Lerp(color, Color.white, 0.2f);
+            colors.pressedColor = Color.Lerp(color, Color.black, 0.25f);
+            colors.selectedColor = color;
+            colors.disabledColor = new Color(color.r, color.g, color.b, 0.4f);
+            btn.colors = colors;
+            text = MakeLabel("Label", go.transform, size, TMPro.TextAlignmentOptions.Center);
+            text.text = label;
+            Stretch((RectTransform)text.transform, 6f);
+            return btn;
+        }
+
+        // --- window ---
+        var root = new GameObject("SettingsWindow", typeof(RectTransform));
+        root.transform.SetParent(canvas, false);
+        Stretch((RectTransform)root.transform, 0f);
+        // The component sits on an object that is always active: on the (hidden) window it would never get its Awake, and no button would be wired.
+        var holder = new GameObject("SettingsController", typeof(RectTransform));
+        holder.transform.SetParent(canvas, false);
+        var sw = holder.AddComponent<SettingsWindow>();
+        sw.window = root;
+
+        var bg = new GameObject("Background", typeof(RectTransform), typeof(RawImage), typeof(RaysBackground));
+        bg.transform.SetParent(root.transform, false);
+        Stretch((RectTransform)bg.transform, 0f);
+        var bgImg = bg.GetComponent<RawImage>();
+        bgImg.material = bgMat; bgImg.raycastTarget = true; // blocks every click behind the window
+
+        sw.title = MakeLabel("Title", root.transform, 64, TMPro.TextAlignmentOptions.Center);
+        var trt = (RectTransform)sw.title.transform;
+        trt.anchorMin = new Vector2(0f, 1f); trt.anchorMax = new Vector2(1f, 1f); trt.pivot = new Vector2(0.5f, 1f);
+        trt.anchoredPosition = new Vector2(0f, -28f); trt.sizeDelta = new Vector2(-40f, 90f);
+
+        // rows: label on the left, control on the right
+        const float rowH = 64f, gap = 14f;
+        var rows = new GameObject("Rows", typeof(RectTransform));
+        rows.transform.SetParent(root.transform, false);
+        var rowsRt = (RectTransform)rows.transform;
+        rowsRt.anchorMin = new Vector2(0f, 0.5f); rowsRt.anchorMax = new Vector2(1f, 0.5f); rowsRt.pivot = new Vector2(0.5f, 0.5f);
+        rowsRt.anchoredPosition = new Vector2(0f, -5f); rowsRt.sizeDelta = new Vector2(760f, 5 * rowH + 4 * gap);
+        sw.content = rowsRt; // SettingsWindow keeps it as wide as the screen allows, up to 760
+
+        RectTransform MakeRow(int index, string name, out TMPro.TMP_Text label)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(rows.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0f, 1f); rt.anchorMax = new Vector2(1f, 1f); rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, -index * (rowH + gap)); rt.sizeDelta = new Vector2(0f, rowH);
+            label = MakeLabel("Label", go.transform, 34, TMPro.TextAlignmentOptions.Left);
+            var lrt = (RectTransform)label.transform;
+            lrt.anchorMin = new Vector2(0f, 0f); lrt.anchorMax = new Vector2(0.5f, 1f); lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+            var control = new GameObject("Control", typeof(RectTransform));
+            control.transform.SetParent(go.transform, false);
+            var crt = (RectTransform)control.transform;
+            crt.anchorMin = new Vector2(0.52f, 0f); crt.anchorMax = new Vector2(1f, 1f); crt.offsetMin = crt.offsetMax = Vector2.zero;
+            return crt;
+        }
+
+        void Stepper(RectTransform control, out Button less, out Button more, out TMPro.TMP_Text value)
+        {
+            TMPro.TMP_Text dummy;
+            less = MakeButton("Less", control, new Color(0.18f, 0.5f, 0.87f), "-", 40, out dummy);
+            more = MakeButton("More", control, new Color(0.18f, 0.5f, 0.87f), "+", 40, out dummy);
+            var lr = (RectTransform)less.transform; lr.anchorMin = lr.anchorMax = new Vector2(0f, 0.5f); lr.pivot = new Vector2(0f, 0.5f); lr.anchoredPosition = Vector2.zero; lr.sizeDelta = new Vector2(rowH, rowH);
+            var mr = (RectTransform)more.transform; mr.anchorMin = mr.anchorMax = new Vector2(1f, 0.5f); mr.pivot = new Vector2(1f, 0.5f); mr.anchoredPosition = Vector2.zero; mr.sizeDelta = new Vector2(rowH, rowH);
+            value = MakeLabel("Value", control, 44, TMPro.TextAlignmentOptions.Center);
+            var vr = (RectTransform)value.transform; vr.anchorMin = Vector2.zero; vr.anchorMax = Vector2.one; vr.offsetMin = new Vector2(rowH + 6f, 0f); vr.offsetMax = new Vector2(-rowH - 6f, 0f);
+        }
+
+        void Switch(RectTransform control, out Button button, out TMPro.TMP_Text state)
+        {
+            button = MakeButton("Switch", control, new Color(0.2f, 0.66f, 0.3f), "ON", 32, out state);
+            var br = (RectTransform)button.transform; br.anchorMin = Vector2.zero; br.anchorMax = Vector2.one; br.offsetMin = br.offsetMax = Vector2.zero;
+        }
+
+        Stepper(MakeRow(0, "PointsRow", out sw.pointsLabel), out sw.pointsLess, out sw.pointsMore, out sw.pointsValue);
+        Stepper(MakeRow(1, "SetsRow", out sw.setsLabel), out sw.setsLess, out sw.setsMore, out sw.setsValue);
+        Switch(MakeRow(2, "VoiceRow", out sw.voiceLabel), out sw.voiceButton, out sw.voiceState);
+        Switch(MakeRow(3, "MusicRow", out sw.musicLabel), out sw.musicButton, out sw.musicState);
+        Switch(MakeRow(4, "SfxRow", out sw.sfxLabel), out sw.sfxButton, out sw.sfxState);
+
+        sw.closeButton = MakeButton("Back", root.transform, new Color(0.18f, 0.5f, 0.87f), "BACK", 34, out sw.closeLabel);
+        var cr = (RectTransform)sw.closeButton.transform;
+        cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0f); cr.pivot = new Vector2(0.5f, 0f); cr.anchoredPosition = new Vector2(0f, 36f); cr.sizeDelta = new Vector2(240f, 66f);
+
+        // --- gear button, top right ---
+        var gearSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/settings-button.png");
+        var gear = new GameObject("SettingsButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        gear.transform.SetParent(canvas, false);
+        var grt = (RectTransform)gear.transform;
+        grt.anchorMin = grt.anchorMax = new Vector2(1f, 1f); grt.pivot = new Vector2(0.5f, 0.5f);
+        grt.anchoredPosition = new Vector2(-55f, -55f); grt.sizeDelta = new Vector2(60f, 60f);
+        var gimg = gear.GetComponent<Image>();
+        gimg.sprite = gearSprite; gimg.preserveAspect = true;
+        sw.openButton = gear.GetComponent<Button>();
+        root.transform.SetAsLastSibling();
+
+        gm.settings = sw;
+        root.SetActive(false);
+        EditorUtility.SetDirty(gm);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Settings button and window added.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Settings Window")]
+    public static void AddSettingsWindow() { EnsureSettingsWindow(); }
+
     [MenuItem("Tools/Beach Tennis GO/Add Result Board")]
     public static void AddResultBoard() { EnsureResultBoard(); }
 
@@ -1179,7 +1410,7 @@ public static class ProjectSetup
     public static void AddLandingAlert() { EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); EnsureWinNavigation(); EnsureSettingsWindow(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()

@@ -21,6 +21,8 @@ public class GameManager : MonoBehaviour
     public GameModeMenu menu;
     [Tooltip("Confetti burst played behind the win title (a ParticleSystem in front of the camera).")]
     public ParticleSystem confetti;
+    [Tooltip("Settings window (points / sets to win, sound switches) and its gear button.")]
+    public SettingsWindow settings;
 
     public enum LanguageChoice { Auto, English, Portuguese, Spanish }
 
@@ -47,13 +49,13 @@ public class GameManager : MonoBehaviour
     [Range(0f, 0.3f)] public float landPitchVariance = 0.1f;
 
     [Header("Match rules")]
-    public int pointsToWin = 11;
+    [Tooltip("Points to win a set and sets to win the match come from the settings window (GameSettings); they are read when a match starts.")]
     public int winBy = 2;
     [Tooltip("Points each player serves in a row (1 once both are near the end).")]
     public int servesPerTurn = 2;
     public int startLevel = 1;
-    [Tooltip("No-Ad: once both players reach this score, the next point wins the match (0 = off).")]
-    public int noAdScore = 15;
+    [Tooltip("No-Ad: once both players are this many points past the points-to-win, the next point wins the set (0 = off).")]
+    public int noAdExtra = 4;
 
     [Header("Timing (s)")]
     public float serveDelay = 1.0f;
@@ -89,6 +91,10 @@ public class GameManager : MonoBehaviour
     float stateTimer;
     int level;
     int playerScore, aiScore;
+    int playerSets, aiSets;
+    int pointsToWin = 11, setsToWin = 1; // rules of the current match (from GameSettings)
+    bool newSetPending;                  // a set just ended and the match goes on: the next point starts a new set
+    int NoAdScore => noAdExtra > 0 ? pointsToWin + noAdExtra : 0;
     int server;
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
@@ -121,7 +127,9 @@ public class GameManager : MonoBehaviour
         {
             hud.RestartClicked -= OnRestartClicked; hud.RestartClicked += OnRestartClicked; // -= first: never subscribe twice
             hud.RetryClicked -= OnRetryClicked; hud.RetryClicked += OnRetryClicked;
+            hud.ContinueClicked -= OnContinueClicked; hud.ContinueClicked += OnContinueClicked;
         }
+        ChannelMute.Attach(sfx, AudioChannel.Sfx);
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
@@ -136,7 +144,7 @@ public class GameManager : MonoBehaviour
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
         // The racket does not follow the pointer when no match is on (menu, win screen, lose screen) nor while an ad plays: a touch there is for
-        // the buttons or "tap to continue", not for moving the racket.
+        // the buttons, not for moving the racket.
         bool inputLocked = state == State.Menu || state == State.MatchOver;
         if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
         ai.Tick(this);
@@ -145,7 +153,7 @@ public class GameManager : MonoBehaviour
         {
             case State.Menu:
                 hud.ShowScore = false;
-                hud.Banner = I18n.Tr("BEACH TENNIS GO!\nClick / tap to play");
+                hud.Banner = I18n.Tr("Click / tap to play");
                 // A tap on the menu's own buttons is not a "play" tap; with the mode window open, a tap elsewhere only closes it.
                 if (Pressed() && !PointerOverUi())
                 {
@@ -167,12 +175,8 @@ public class GameManager : MonoBehaviour
                 if (stateTimer > pointOverDelay) NextPoint();
                 break;
             case State.MatchOver:
-                if (playerScore > aiScore && stateTimer > matchOverInputDelay && Pressed() && !PokiService.AdPlaying) // a loss has its own buttons
-                {
-                    if (playerScore > aiScore) level++;
-                    // Back into gameplay: the ad break (if any) comes here, then the next match starts.
-                    if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
-                }
+                // The win screen has its own buttons (CONTINUE, and Game mode); with the mode window open, a tap elsewhere only closes it.
+                if (playerScore > aiScore && Pressed() && !PointerOverUi() && menu != null && menu.WindowOpen) menu.CloseWindow();
                 break;
         }
         UpdateHud();
@@ -205,24 +209,43 @@ public class GameManager : MonoBehaviour
 
     void UpdateHud()
     {
+        hud.BannerPulse = state == State.Menu; // only the "tap to play" hint of the menu pulses
         if (!namesSet) { hud.SetNames(I18n.Tr("PLAYER"), "CPU"); namesSet = true; }
         hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
-        if (menu != null) menu.SetVisible(state == State.Menu);
         bool wonMatch = state == State.MatchOver && playerScore > aiScore;
-        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), I18n.Tr("WON"), I18n.Tr("Click / tap for next level")); winLabelsSet = true; }
+        if (menu != null) menu.SetVisible(state == State.Menu || wonMatch, state == State.Menu); // the win screen also offers the Game mode button
+        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), I18n.Tr("WON"), I18n.Tr("CONTINUE")); winLabelsSet = true; }
         hud.SetWinTitle(wonMatch);
+        hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         bool lostMatch = state == State.MatchOver && aiScore > playerScore;
         hud.SetLoseButtons(lostMatch, lostMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         if (lostMatch && !loseLabelsSet) { hud.SetLoseLabels(I18n.Tr("RESTART"), I18n.Tr("RETRY")); loseLabelsSet = true; }
         hud.SetScore(playerScore, aiScore);
         hud.SetTime(matchTime);
-        if (level != infoLevel) { infoLevel = level; info = I18n.Tr("You  vs  CPU   |   Level {0}", level); }
+        int infoKey = level * 1000 + playerSets * 100 + aiSets * 10 + setsToWin;
+        if (infoKey != infoLevel)
+        {
+            infoLevel = infoKey;
+            info = I18n.Tr("You  vs  CPU   |   Level {0}", level);
+            if (setsToWin > 1) info += "   |   " + I18n.Tr("Sets {0} - {1}", playerSets, aiSets);
+        }
         hud.Info = info;
+        if (settings != null) settings.SetButtonVisible(state == State.Menu || state == State.MatchOver);
     }
 
     // Poki: an ad break comes before every start of gameplay (it only plays when Poki decides it is time), then the match starts.
     void BeginMatch()
     {
+        if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
+    }
+
+    bool CanUseContinue => state == State.MatchOver && playerScore > aiScore && stateTimer > matchOverInputDelay && !PokiService.AdPlaying;
+
+    // CONTINUE (win screen): next level. Back into gameplay: the ad break (if any) comes here, then the next match starts.
+    void OnContinueClicked()
+    {
+        if (!CanUseContinue) return;
+        level++;
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
 
@@ -251,7 +274,11 @@ public class GameManager : MonoBehaviour
 
     void StartMatch()
     {
+        pointsToWin = GameSettings.PointsToWin;
+        setsToWin = GameSettings.SetsToWin;
         playerScore = aiScore = 0;
+        playerSets = aiSets = 0;
+        newSetPending = false;
         matchTime = 0f;
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         if (poki != null) poki.GameplayStart(); // the player's first input of the match
@@ -285,7 +312,7 @@ public class GameManager : MonoBehaviour
         AnnouncePointStakes();
     }
 
-    // Would the next point win the match for this side?
+    // Would the next point win the set for this side (and with it the match, in the last set)?
     bool WinsMatchWithNextPoint(int side)
     {
         int a = (side == 0 ? playerScore : aiScore) + 1, b = side == 0 ? aiScore : playerScore;
@@ -295,11 +322,11 @@ public class GameManager : MonoBehaviour
     // Win at pointsToWin with a lead of winBy; once both reach noAdScore, the next point wins (no advantage).
     bool IsMatchOver(int a, int b)
     {
-        if (noAdScore > 0 && Mathf.Max(a, b) > noAdScore) return true;
+        if (NoAdScore > 0 && Mathf.Max(a, b) > NoAdScore) return true;
         return Mathf.Max(a, b) >= pointsToWin && Mathf.Abs(a - b) >= winBy;
     }
 
-    bool NoAdPoint => noAdScore > 0 && playerScore == noAdScore && aiScore == noAdScore;
+    bool NoAdPoint => NoAdScore > 0 && playerScore == NoAdScore && aiScore == NoAdScore;
 
     void AnnouncePointStakes()
     {
@@ -461,24 +488,31 @@ public class GameManager : MonoBehaviour
         if (state != State.Rally) return;
         if (winner == 0) playerScore++; else aiScore++;
         hud.Banner = winner == 0 ? I18n.Tr("Point!") : I18n.Tr("CPU point");
-        bool over = IsMatchOver(playerScore, aiScore);
-        if (over)
+        bool setOver = IsMatchOver(playerScore, aiScore);
+        if (setOver)
         {
-            hud.Banner = playerScore > aiScore ? "" : I18n.Tr("YOU LOSE"); // a win shows the big centred title with its hint instead (UpdateHud)
-            EnterState(State.MatchOver);
-            if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
-            if (poki != null) poki.GameplayStop();
-            PlayCrowd();
-            return;
+            if (playerScore > aiScore) playerSets++; else aiSets++;
+            if (playerSets >= setsToWin || aiSets >= setsToWin)
+            {
+                hud.Banner = playerScore > aiScore ? "" : I18n.Tr("YOU LOSE"); // a win shows the big centred title instead (UpdateHud)
+                EnterState(State.MatchOver);
+                if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
+                if (poki != null) poki.GameplayStop();
+                PlayCrowd();
+                return;
+            }
+            hud.Banner = playerScore > aiScore ? I18n.Tr("SET TO YOU") : I18n.Tr("SET TO CPU"); // the match goes on: a new set starts after the pause
+            newSetPending = true;
         }
         EnterState(State.PointOver);
     }
 
     void NextPoint()
     {
+        if (newSetPending) { newSetPending = false; playerScore = aiScore = 0; }
         int total = playerScore + aiScore;
         bool endgame = playerScore >= pointsToWin - 1 && aiScore >= pointsToWin - 1;
-        server = endgame ? total % 2 : (total / servesPerTurn) % 2;
+        server = ((endgame ? total % 2 : (total / servesPerTurn) % 2) + playerSets + aiSets) % 2; // each new set starts with the other side serving
         ball.SetVisible(false);
         player.ResetPosition();
         ai.ResetPosition();

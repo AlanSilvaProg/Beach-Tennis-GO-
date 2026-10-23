@@ -23,6 +23,7 @@ public class ButtonClickSound : MonoBehaviour
         self.source = go.AddComponent<AudioSource>();
         self.source.playOnAwake = false;
         self.source.spatialBlend = 0f; // plain 2D sound
+        ChannelMute.Attach(self.source, AudioChannel.Sfx);
         foreach (var b in FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None)) b.onClick.AddListener(self.Play);
     }
 

@@ -34,15 +34,30 @@ public class HudView : MonoBehaviour
     public GameObject winTitle;
     public TMP_Text winLine1;     // white
     public TMP_Text winLine2;     // yellow
-    public TMP_Text winHint;      // "click / tap for next level", part of the same centred group
+    [Tooltip("CONTINUE: starts the next level. Part of the same centred group, below the title.")]
+    public Button winContinueButton;
+    public TMP_Text winContinueLabel;
+    public event System.Action ContinueClicked;
+    [Tooltip("Rotating sunburst behind the whole win screen (RawImage with the RaysBackground shader); fades in with the title.")]
+    public RawImage winBackground;
     [Tooltip("Seconds of the pop-in animation.")]
     public float winPopTime = 0.45f;
+    [Tooltip("Seconds the background takes to fade in.")]
+    public float winBackgroundFade = 0.35f;
 
     [Header("Text")]
     public TMP_Text infoText;
     public TMP_Text bannerText;
 
+    [Header("Pulsing hint (\"tap to play\" in the menu)")]
+    [Tooltip("Largest font size of the banner while it pulses (otherwise the banner's own Font Size Max applies).")]
+    public float pulsingBannerSize = 40f;
+    [Range(0f, 0.2f)] public float bannerPulse = 0.06f;
+    public float bannerPulseSpeed = 3.2f;
+
     string info = "", banner = "";
+    bool pulsing;
+    float bannerNormalMax = -1f;
     int player = -1, npc = -1, shownSeconds = -1;
     bool showScore;
 
@@ -50,6 +65,7 @@ public class HudView : MonoBehaviour
     {
         if (restartButton != null) { restartButton.onClick.RemoveAllListeners(); restartButton.onClick.AddListener(() => RestartClicked?.Invoke()); }
         if (retryButton != null) { retryButton.onClick.RemoveAllListeners(); retryButton.onClick.AddListener(() => RetryClicked?.Invoke()); }
+        if (winContinueButton != null) { winContinueButton.onClick.RemoveAllListeners(); winContinueButton.onClick.AddListener(() => ContinueClicked?.Invoke()); }
         SetLoseButtons(false, false);
         Apply(infoText, info);
         Apply(bannerText, banner);
@@ -121,6 +137,11 @@ public class HudView : MonoBehaviour
     {
         if (winTitle == null || winTitle.activeSelf == visible) return;
         winTitle.SetActive(visible);
+        if (winBackground != null)
+        {
+            winBackground.gameObject.SetActive(visible);
+            var c = winBackground.color; c.a = 0f; winBackground.color = c; // fades in from nothing
+        }
         if (visible) { winShownAt = Time.unscaledTime; winTitle.transform.localScale = Vector3.zero; }
     }
 
@@ -130,15 +151,29 @@ public class HudView : MonoBehaviour
         Apply(npcNameLabel, npc);
     }
 
-    public void SetWinLabels(string line1, string line2, string hint)
+    public void SetWinLabels(string line1, string line2, string continueText)
     {
         Apply(winLine1, line1);
         Apply(winLine2, line2);
-        Apply(winHint, hint);
+        Apply(winContinueLabel, continueText);
+    }
+
+    // CONTINUE is clickable only when `interactable` (not during the first moments, not during an ad).
+    public void SetWinContinueInteractable(bool interactable)
+    {
+        if (winContinueButton != null) winContinueButton.interactable = interactable;
     }
 
     void Update()
     {
+        if (pulsing && bannerText != null)
+            bannerText.transform.localScale = Vector3.one * (1f + bannerPulse * Mathf.Sin(Time.unscaledTime * bannerPulseSpeed));
+        if (winBackground != null && winBackground.gameObject.activeSelf)
+        {
+            var c = winBackground.color;
+            c.a = Mathf.MoveTowards(c.a, 1f, Time.unscaledDeltaTime / Mathf.Max(0.05f, winBackgroundFade));
+            winBackground.color = c;
+        }
         if (winTitle == null || !winTitle.activeSelf) return;
         float k = Mathf.Clamp01((Time.unscaledTime - winShownAt) / Mathf.Max(0.05f, winPopTime));
         float back = 1f + 2.2f * Mathf.Pow(k - 1f, 3f) + 1.2f * Mathf.Pow(k - 1f, 2f); // ease-out-back: overshoots a little, then settles
@@ -149,6 +184,21 @@ public class HudView : MonoBehaviour
     {
         get => info;
         set { if (info == value) return; info = value; Apply(infoText, value); }
+    }
+
+    // The banner breathes (a bit larger and pulsing) while it asks the player to tap to play.
+    public bool BannerPulse
+    {
+        get => pulsing;
+        set
+        {
+            if (pulsing == value) return;
+            pulsing = value;
+            if (bannerText == null) return;
+            if (bannerNormalMax < 0f) bannerNormalMax = bannerText.fontSizeMax;
+            bannerText.fontSizeMax = value ? pulsingBannerSize : bannerNormalMax;
+            if (!value) bannerText.transform.localScale = Vector3.one;
+        }
     }
 
     public string Banner

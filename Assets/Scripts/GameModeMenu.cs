@@ -30,6 +30,9 @@ public class GameModeMenu : MonoBehaviour
     [Tooltip("Picture of the Tournament button in each language (English, Portuguese, Spanish).")]
     public Sprite[] tournamentSprites = new Sprite[3];
     public Button onlineButton;
+    [Tooltip("BACK: closes the window.")]
+    public Button backButton;
+    public TMP_Text backLabel;
     [Tooltip("How much of the window is on screen when it is open (0.5 = half of it; the other half stays off the left edge).")]
     [Range(0.3f, 1f)] public float visibleFraction = 0.5f;
     [Tooltip("Thickness of the window's frame (canvas units). The three buttons are centred in the space that is on screen and inside the frame.")]
@@ -65,6 +68,7 @@ public class GameModeMenu : MonoBehaviour
         Wire(trainingButton, GameMode.Training);
         Wire(tournamentButton, GameMode.Tournament);
         Wire(onlineButton, GameMode.Online);
+        if (backButton != null) { backButton.onClick.RemoveAllListeners(); backButton.onClick.AddListener(CloseWindow); }
         CenterButtons();
         Refresh();
         currentX = ClosedX;
@@ -77,7 +81,7 @@ public class GameModeMenu : MonoBehaviour
 
     void CenterButtons()
     {
-        foreach (var b in new[] { trainingButton, tournamentButton, onlineButton })
+        foreach (var b in new[] { trainingButton, tournamentButton, onlineButton, backButton })
         {
             if (b == null) continue;
             var rt = (RectTransform)b.transform;
@@ -105,10 +109,11 @@ public class GameModeMenu : MonoBehaviour
     public void ToggleWindow() { WindowOpen = !WindowOpen; }
     public void CloseWindow() { WindowOpen = false; }
 
-    // The menu is only visible outside a match; hiding it also closes the window.
-    public void SetVisible(bool visible)
+    // The menu is only visible outside a match (and on the win screen, without the mode name); hiding it also closes the window.
+    public void SetVisible(bool visible, bool showLabel = true)
     {
         if (root != null && root.activeSelf != visible) root.SetActive(visible);
+        if (modeLabel != null && modeLabel.gameObject.activeSelf != showLabel) modeLabel.gameObject.SetActive(showLabel);
         if (!visible && (WindowOpen || currentX != ClosedX)) { WindowOpen = false; currentX = ClosedX; velocity = 0f; ApplyX(); }
     }
 
@@ -123,13 +128,16 @@ public class GameModeMenu : MonoBehaviour
         WindowOpen = false;
     }
 
-    // Label text and the highlight of the selected mode's button.
+    // Label text and the selected mode's button: highlighted and disabled (it is the mode being played).
     public void Refresh()
     {
         if (modeLabel != null) modeLabel.text = ModeName(Mode);
         Highlight(trainingButton, Mode == GameMode.Training);
         Highlight(tournamentButton, Mode == GameMode.Tournament);
         Highlight(onlineButton, Mode == GameMode.Online);
+        if (trainingButton != null) trainingButton.interactable = Mode != GameMode.Training;
+        if (tournamentButton != null) tournamentButton.interactable = Mode != GameMode.Tournament;
+        if (onlineButton != null) onlineButton.interactable = Mode != GameMode.Online;
     }
 
     public static string ModeName(GameMode mode)
@@ -178,6 +186,7 @@ public class GameModeMenu : MonoBehaviour
         int lang = (int)I18n.Current;
         if (lang == shownLanguage) return;
         shownLanguage = lang;
+        if (backLabel != null) backLabel.text = I18n.Tr("BACK");
         SetLanguageSprite(openButton, openButtonSprites, lang);
         SetLanguageSprite(trainingButton, trainingSprites, lang);
         SetLanguageSprite(tournamentButton, tournamentSprites, lang);

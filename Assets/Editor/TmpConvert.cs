@@ -118,7 +118,7 @@ public static class TmpConvert
             view.npcDigits = new[] { Get("NpcScore_Tens"), Get("NpcScore_Units") };
             view.timeDigits = new[] { Get("Hours_Tens"), Get("Hours_Units"), Get("Minutes_Tens"), Get("Minutes_Units"), Get("Seconds_Tens"), Get("Seconds_Units") };
             view.restartLabel = Get("Restart/Label"); view.retryLabel = Get("Retry/Label");
-            view.winLine1 = Get("WinTitle/Line1"); view.winLine2 = Get("WinTitle/Line2"); view.winHint = Get("WinTitle/Hint");
+            view.winLine1 = Get("WinTitle/Line1"); view.winLine2 = Get("WinTitle/Line2");
             view.infoText = Get("HUD/Info"); view.bannerText = Get("HUD/Banner");
             EditorUtility.SetDirty(view);
         }

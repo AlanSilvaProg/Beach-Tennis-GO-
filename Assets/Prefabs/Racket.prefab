@@ -53,9 +53,12 @@ MonoBehaviour:
   minDistance: 0.6
   maxDistance: 8.5
   maxX: 4.7
+  limitToArea: 1
   hitRadius: 0.7
   hitHeight: 0.7
   velocitySmoothing: 25
+  powerWindow: 0.12
+  directionWindow: 0.05
   rollPerSpeed: 4
   maxRoll: 35
   pitchPerSpeed: 5
@@ -122,6 +125,26 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
+      propertyPath: m_CastShadows
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
+      propertyPath: m_ReceiveShadows
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
+      propertyPath: m_LightProbeUsage
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
+      propertyPath: m_ReflectionProbeUsage
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 79ea743a8485440208ff7d1de09249d4, type: 2}
     - target: {fileID: 919132149155446097, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
       propertyPath: m_Name
       value: Model

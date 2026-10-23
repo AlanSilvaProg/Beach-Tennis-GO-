@@ -65,6 +65,7 @@ public class ShotAnnouncer : MonoBehaviour
     {
         if (loading) return;
         loading = true;
+        ChannelMute.Attach(voice, AudioChannel.Voice);
         StartCoroutine(LoadAll());
     }
 
