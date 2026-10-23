@@ -42,14 +42,14 @@ public static class BuildScript
     }
 
     // Poki's build guidelines for Unity WebGL: no compression (Poki's servers compress), hashed file names (cache busting), the smallest exception
-    // support, engine code stripped, high managed stripping, data caching on. Set before every build so they cannot drift.
+    // support, engine code stripped, high managed stripping. Data caching is deliberately OFF (see below). Set before every build so they cannot drift.
     static void ApplyPokiBuildSettings()
     {
         PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
         PlayerSettings.WebGL.decompressionFallback = false;
         PlayerSettings.WebGL.nameFilesAsHashes = true;
         PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.None;
-        PlayerSettings.WebGL.dataCaching = true;
+        PlayerSettings.WebGL.dataCaching = false; // off: with hashed file names the browser's own HTTP cache already does the job, and Unity's IndexedDB cache layer hung page reloads inside the Poki inspector
         PlayerSettings.stripEngineCode = true;
         PlayerSettings.SetManagedStrippingLevel(UnityEditor.Build.NamedBuildTarget.WebGL, ManagedStrippingLevel.High);
     }
