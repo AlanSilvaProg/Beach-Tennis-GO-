@@ -61,6 +61,12 @@ public class AiRacketController : RacketController
     [Range(0.5f, 1f)] public float pressureFlight = 0.8f;
     [Tooltip("Where the return arrives, measured from the net (min, max).")]
     public Vector2 depthRange = new Vector2(1.5f, 7.4f);
+    [Tooltip("Up to this level the CPU plays fewer short balls (balls that land close to the net).")]
+    public int fewerShortShotsUpToLevel = 2;
+    [Tooltip("A target shallower than this (m from the net) counts as a short ball.")]
+    public float shortShotDepth = 4.5f;
+    [Tooltip("Chance (0..1) that such a short target is replaced by a deeper one in those levels; 0 = unchanged, 1 = never short.")]
+    [Range(0f, 1f)] public float shortShotReroll = 0.5f;
     [Tooltip("Aimed shots stay at least this far inside the sidelines (m).")]
     public float edgeMargin = 0.5f;
     [Tooltip("How far (m) ahead the player's racket is assumed to keep moving when choosing the target.")]
@@ -84,6 +90,7 @@ public class AiRacketController : RacketController
     readonly float[] scores = new float[GridX * GridZ];
 
     float speed, error, mistake, shotMistake, reaction, flight, aimNoise;
+    int currentLevel = 1;
     float reactTimer;
     Vector3 errorVec;
     bool blunder;
@@ -91,6 +98,7 @@ public class AiRacketController : RacketController
     public void SetLevel(int level)
     {
         int l = Mathf.Clamp(level, 1, 12);
+        currentLevel = l;
         speed = speedBase + speedPerLevel * l;
         error = Mathf.Max(errorMin, errorBase + errorPerLevel * l);
         mistake = Mathf.Max(mistakeMin, mistakeBase + mistakePerLevel * l);
@@ -251,6 +259,9 @@ public class AiRacketController : RacketController
         }
         float bestX = Mathf.Lerp(-maxX, maxX, (chosen / GridZ) / (float)(GridX - 1));
         float bestDepth = Mathf.Lerp(minD, maxD, (chosen % GridZ) / (float)(GridZ - 1));
+        // The first levels drop it short less often: some short targets are swapped for a deeper one.
+        if (currentLevel <= fewerShortShotsUpToLevel && bestDepth < shortShotDepth && Random.value < shortShotReroll)
+            bestDepth = Random.Range(Mathf.Max(shortShotDepth, minD), maxD);
         float bestDist = Vector2.Distance(new Vector2(pp.x, pp.z), new Vector2(bestX, zSign * bestDepth));
         recentTargets[recentHead] = new Vector2(bestX, zSign * bestDepth);
         recentHead = (recentHead + 1) % Recent;
