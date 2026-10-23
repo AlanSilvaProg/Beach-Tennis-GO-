@@ -1263,6 +1263,73 @@ public static class ProjectSetup
     [MenuItem("Tools/Beach Tennis GO/Add Back Buttons And Fade")]
     public static void AddBackButtonsAndFade() { EnsureBackButtonsAndFade(); }
 
+    // The menu's "tap to play" hint: a hand tapping on the player's racket with a ring and stars (see TapHint). Replaces the old text.
+    static void EnsureTapHint()
+    {
+        var scene = OpenGameplayScene();
+        var view = Object.FindFirstObjectByType<HudView>();
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (view == null || view.infoText == null || gm == null) return;
+        if (Object.FindFirstObjectByType<TapHint>() != null) return;
+
+        Sprite Sprite(string file)
+        {
+            string path = "Assets/Sprites/TapHint/" + file;
+            var imp = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (imp != null && (imp.textureType != TextureImporterType.Sprite || imp.mipmapEnabled))
+            {
+                imp.textureType = TextureImporterType.Sprite; imp.spriteImportMode = SpriteImportMode.Single;
+                imp.alphaIsTransparency = true; imp.mipmapEnabled = false;
+                imp.textureCompression = TextureImporterCompression.Compressed; imp.crunchedCompression = true; imp.compressionQuality = 90;
+                imp.maxTextureSize = 128;
+                imp.SaveAndReimport();
+            }
+            return AssetDatabase.LoadAssetAtPath<UnityEngine.Sprite>(path);
+        }
+
+        Image MakeImage(string name, Transform parent, UnityEngine.Sprite sprite, Vector2 size)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f); rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.sprite = sprite; img.raycastTarget = false; img.preserveAspect = true;
+            return img;
+        }
+
+        var canvas = view.infoText.canvas.transform;
+        var holder = new GameObject("TapHint", typeof(RectTransform));
+        holder.transform.SetParent(canvas, false);
+        var hrt = (RectTransform)holder.transform;
+        hrt.anchorMin = hrt.anchorMax = new Vector2(0.5f, 0.5f); hrt.sizeDelta = Vector2.zero;
+        holder.transform.SetSiblingIndex(1); // above the win background, below the rest of the HUD
+        var hint = holder.AddComponent<TapHint>();
+        hint.game = gm;
+
+        var content = new GameObject("Content", typeof(RectTransform));
+        content.transform.SetParent(holder.transform, false);
+        var crt = (RectTransform)content.transform;
+        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f); crt.sizeDelta = Vector2.zero;
+        hint.content = content;
+
+        hint.ring = MakeImage("Ring", content.transform, Sprite("tap-ring.png"), new Vector2(104f, 104f));
+        var starSprite = Sprite("tap-star.png");
+        hint.stars = new Image[5];
+        for (int i = 0; i < hint.stars.Length; i++) hint.stars[i] = MakeImage("Star" + i, content.transform, starSprite, new Vector2(25f, 25f));
+        var handImg = MakeImage("Hand", content.transform, Sprite("hand-pointer.png"), new Vector2(116f, 124f));
+        hint.hand = handImg.rectTransform;
+
+        EditorUtility.SetDirty(holder);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[BeachTennisGO] Tap hint (hand) added to the HUD.");
+    }
+
+    [MenuItem("Tools/Beach Tennis GO/Add Tap Hint")]
+    public static void AddTapHint() { EnsureTapHint(); }
+
     // Settings: the gear button (top right) and a full-screen window on a calm sand -> sea gradient with the match rules and the sound switches.
     static void EnsureSettingsWindow()
     {
@@ -1486,7 +1553,7 @@ public static class ProjectSetup
     public static void AddLandingAlert() { EnsureLandingAlert(); }
 
     [MenuItem("Tools/Beach Tennis GO/Add HUD Canvas")]
-    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); EnsureWinNavigation(); EnsureBackButtonsAndFade(); EnsureSettingsWindow(); }
+    public static void AddHudCanvas() { EnsureHud(); EnsureResultBoard(); EnsureScoreboardSign(); EnsureLandingAlert(); EnsureLoseButtons(); EnsureGameModeMenu(); EnsureWinCelebration(); EnsureWinNavigation(); EnsureBackButtonsAndFade(); EnsureSettingsWindow(); EnsureTapHint(); }
 
     [MenuItem("Tools/Beach Tennis GO/Rebuild Ad Panels (resets per-panel settings)")]
     public static void RebuildAdPanels()

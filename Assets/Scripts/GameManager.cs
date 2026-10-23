@@ -116,6 +116,7 @@ public class GameManager : MonoBehaviour
     public float BallSpeed => ballSpeed;
     public PlayerRacketController Player => player;
     public bool AiShouldChase => state == State.Rally && lastHitter == 0;
+    public bool InMenu => state == State.Menu;
     // A match is on: serving, rallying or pausing between points (not the menu or the result screens).
     public bool MatchOn => state == State.Serving || state == State.Rally || state == State.PointOver;
     public bool AiServing => state == State.Serving && server == 1;
@@ -156,7 +157,7 @@ public class GameManager : MonoBehaviour
         {
             case State.Menu:
                 hud.ShowScore = false;
-                hud.Banner = I18n.Tr("Click / tap to play");
+                hud.Banner = ""; // no text: the TapHint hand shows what to do
                 // A tap on the menu's own buttons is not a "play" tap; with the mode window open, a tap elsewhere only closes it.
                 if (Pressed() && !PointerOverUi())
                 {
@@ -217,7 +218,6 @@ public class GameManager : MonoBehaviour
 
     void UpdateHud()
     {
-        hud.BannerPulse = state == State.Menu; // only the "tap to play" hint of the menu pulses
         if (!namesSet) { hud.SetNames(I18n.Tr("PLAYER"), "CPU"); namesSet = true; }
         hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
         bool wonMatch = state == State.MatchOver && playerScore > aiScore;

@@ -56,15 +56,7 @@ public class HudView : MonoBehaviour
     public TMP_Text infoText;
     public TMP_Text bannerText;
 
-    [Header("Pulsing hint (\"tap to play\" in the menu)")]
-    [Tooltip("Largest font size of the banner while it pulses (otherwise the banner's own Font Size Max applies).")]
-    public float pulsingBannerSize = 40f;
-    [Range(0f, 0.2f)] public float bannerPulse = 0.06f;
-    public float bannerPulseSpeed = 3.2f;
-
     string info = "", banner = "";
-    bool pulsing;
-    float bannerNormalMax = -1f;
     int player = -1, npc = -1, shownSeconds = -1;
     bool showScore;
 
@@ -183,8 +175,6 @@ public class HudView : MonoBehaviour
 
     void Update()
     {
-        if (pulsing && bannerText != null)
-            bannerText.transform.localScale = Vector3.one * (1f + bannerPulse * Mathf.Sin(Time.unscaledTime * bannerPulseSpeed));
         if (winBackground != null && winBackground.gameObject.activeSelf)
         {
             var c = winBackground.color;
@@ -201,21 +191,6 @@ public class HudView : MonoBehaviour
     {
         get => info;
         set { if (info == value) return; info = value; Apply(infoText, value); }
-    }
-
-    // The banner breathes (a bit larger and pulsing) while it asks the player to tap to play.
-    public bool BannerPulse
-    {
-        get => pulsing;
-        set
-        {
-            if (pulsing == value) return;
-            pulsing = value;
-            if (bannerText == null) return;
-            if (bannerNormalMax < 0f) bannerNormalMax = bannerText.fontSizeMax;
-            bannerText.fontSizeMax = value ? pulsingBannerSize : bannerNormalMax;
-            if (!value) bannerText.transform.localScale = Vector3.one;
-        }
     }
 
     public string Banner
