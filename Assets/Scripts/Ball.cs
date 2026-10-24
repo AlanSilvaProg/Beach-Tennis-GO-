@@ -115,4 +115,13 @@ public class Ball : MonoBehaviour
         }
         return false;
     }
+
+#if UNITY_EDITOR
+    // Gizmos: the collision sphere (where the ball is while the game runs, where the transform is otherwise).
+    void OnDrawGizmos()
+    {
+        Gizmos.color = GizmoShapes.BallColor;
+        Gizmos.DrawWireSphere(Application.isPlaying ? Position : transform.position, radius);
+    }
+#endif
 }

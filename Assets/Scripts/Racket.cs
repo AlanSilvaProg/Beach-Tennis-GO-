@@ -155,4 +155,29 @@ public class Racket : MonoBehaviour
         float pitch = Mathf.Clamp(ForwardSpeed * pitchPerSpeed, -maxPitch, maxPitch) + restPitch;
         transform.rotation = Quaternion.Euler(0f, facingYaw, 0f) * Quaternion.Euler(pitch, 0f, roll);
     }
+
+#if UNITY_EDITOR
+    // Gizmos: the area the racket can move in (cyan), the hit area (green cylinder: ground reach, up to the height reach above the head)
+    // and the path it swept in the last frame.
+    void OnDrawGizmos()
+    {
+        Vector3 p = Application.isPlaying ? Position : transform.position;
+        Vector3 ground = new Vector3(p.x, 0f, p.z);
+        Vector3 headBase = new Vector3(p.x, height, p.z);
+        GizmoShapes.Cylinder(headBase, hitRadius, hitHeight, GizmoShapes.HitArea);
+        GizmoShapes.Circle(ground + Vector3.up * 0.02f, hitRadius, new Color(0.3f, 1f, 0.35f, 0.35f));
+
+        if (limitToArea)
+        {
+            float side = SideSign; // -1: player side (z < 0), +1: opponent side
+            float z0 = side * minDistance, z1 = side * maxDistance;
+            GizmoShapes.Rect(new Vector3(0f, height, (z0 + z1) * 0.5f), maxX, Mathf.Abs(z1 - z0) * 0.5f, GizmoShapes.PlayArea);
+        }
+        if (Application.isPlaying)
+        {
+            Gizmos.color = Color.white;
+            Gizmos.DrawLine(PreviousPosition, Position);
+        }
+    }
+#endif
 }

@@ -132,4 +132,9 @@ public class PlayerRacketController : RacketController
         float t = Mathf.Lerp(slowFlight, fastFlight, aimed);
         return gm.Ball.SolveHit(contact, landX, landZ, court.groundY + gm.Ball.radius, t, gm.Net);
     }
+
+#if UNITY_EDITOR
+    // Gizmo: where the racket rests (outside a match).
+    void OnDrawGizmos() { GizmoShapes.Cross(restPosition, 0.3f, GizmoShapes.PlayArea); }
+#endif
 }

@@ -540,4 +540,17 @@ public class GameManager : MonoBehaviour
         ai.ResetPosition();
         PrepareServe();
     }
+
+#if UNITY_EDITOR
+    // Gizmos: where the serve ball hangs for each side (the CPU's spot varies along the line).
+    void OnDrawGizmos()
+    {
+        if (court == null) return;
+        float y = serveBallHeight;
+        float zNear = -(court.halfLength - serveBaselineOffset), zFar = court.halfLength - serveBaselineOffset;
+        GizmoShapes.Cross(new Vector3(0f, y, zNear), 0.3f, GizmoShapes.Serve);
+        Gizmos.color = GizmoShapes.Serve;
+        Gizmos.DrawLine(new Vector3(-serveBallSpread, y, zFar), new Vector3(serveBallSpread, y, zFar));
+    }
+#endif
 }

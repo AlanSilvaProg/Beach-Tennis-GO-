@@ -273,4 +273,22 @@ public class AiRacketController : RacketController
         t = Mathf.Max(flightMin * 0.8f, t);
         return gm.Ball.SolveHit(contact, bestX, zSign * bestDepth, court.groundY + gm.Ball.radius, t, gm.Net);
     }
+
+#if UNITY_EDITOR
+    // Gizmos: where the CPU rests, the zone its returns aim at (on the player's side) and the "short ball" line used by the first levels.
+    void OnDrawGizmos()
+    {
+        GizmoShapes.Cross(restPosition, 0.3f, GizmoShapes.Aim);
+        var court = FindFirstObjectByType<Court>();
+        if (court == null) return;
+        float z = -Racket.SideSign;              // the player's side, where the CPU sends the ball
+        float maxX = court.halfWidth - edgeMargin;
+        float maxD = Mathf.Min(depthRange.y, court.halfLength - edgeMargin);
+        float minD = Mathf.Min(depthRange.x, maxD);
+        float y = court.groundY + 0.03f;
+        GizmoShapes.Rect(new Vector3(0f, y, z * (minD + maxD) * 0.5f), maxX, (maxD - minD) * 0.5f, GizmoShapes.Aim);
+        Gizmos.color = new Color(GizmoShapes.Aim.r, GizmoShapes.Aim.g, GizmoShapes.Aim.b, 0.6f);
+        Gizmos.DrawLine(new Vector3(-maxX, y, z * shortShotDepth), new Vector3(maxX, y, z * shortShotDepth));
+    }
+#endif
 }

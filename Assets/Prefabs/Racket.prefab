@@ -47,7 +47,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Racket
   model: {fileID: 1541867155436177886}
   modelScale: 1.6
-  headCenter: 0.68
+  headCenter: 0.54
   facingYaw: 0
   height: 1
   minDistance: 0.6
@@ -91,7 +91,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -1.088
+      value: -0.864
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
       propertyPath: m_LocalPosition.z

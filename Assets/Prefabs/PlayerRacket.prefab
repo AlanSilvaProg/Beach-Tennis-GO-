@@ -9,6 +9,22 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: 1541867155436177886, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 1541867155436177886, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 1541867155436177886, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 1541867155436177886, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.864
+      objectReference: {fileID: 0}
+    - target: {fileID: 1541867155436177886, guid: b8ed98a5601bb4ef0b5c2324b58c01bd, type: 3}
       propertyPath: m_LocalRotation.w
       value: 0
       objectReference: {fileID: 0}
@@ -95,7 +111,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerRacketController
   cam: {fileID: 0}
   restPosition: {x: 0, y: 1, z: -4.8}
-  pointerLift: 0.06
+  pointerLift: 0.087
   maxSwipeSpeed: 8
   forwardWeight: 1
   sideWeight: 0.6

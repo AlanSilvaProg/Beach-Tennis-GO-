@@ -51,4 +51,18 @@ public class Court : MonoBehaviour
         t.localPosition = pos;
         t.localScale = scale;
     }
+
+#if UNITY_EDITOR
+    // Gizmos: the playing area (what counts as "in") and the extra margin the CPU still plays as in; the net line.
+    void OnDrawGizmos()
+    {
+        Vector3 c = transform.position + Vector3.up * (groundY + 0.02f);
+        GizmoShapes.Rect(c, halfWidth, halfLength, GizmoShapes.Court);
+        Gizmos.color = GizmoShapes.Court;
+        Gizmos.DrawLine(c + new Vector3(-halfWidth, 0f, 0f), c + new Vector3(halfWidth, 0f, 0f)); // the net line
+        var ai = FindFirstObjectByType<AiRacketController>();
+        if (ai != null && ai.outTolerance > 0f)
+            GizmoShapes.Rect(c, halfWidth + ai.outTolerance, halfLength + ai.outTolerance, new Color(1f, 1f, 1f, 0.3f));
+    }
+#endif
 }

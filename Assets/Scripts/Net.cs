@@ -36,4 +36,15 @@ public class Net : MonoBehaviour
             band.localScale = new Vector3(width / modelSize.x, bandHeight / modelSize.y, thickness / modelSize.z);
         }
     }
+
+#if UNITY_EDITOR
+    // Gizmos: the box the ball collides with (red) and the top edge of the net.
+    void OnDrawGizmos()
+    {
+        Vector3 size = new Vector3(width, height, Mathf.Max(thickness, 0.02f));
+        Gizmos.color = GizmoShapes.Net;
+        Gizmos.DrawWireCube(transform.position + Vector3.up * (height * 0.5f), size);
+        Gizmos.DrawLine(transform.position + new Vector3(-HalfWidth, height, 0f), transform.position + new Vector3(HalfWidth, height, 0f));
+    }
+#endif
 }
