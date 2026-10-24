@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scene/GameplayCameraDif.unity
+    guid: dc06fa768e0e74e368561f31fe38d194
+  - enabled: 0
     path: Assets/Scene/Gameplay.unity
     guid: 10dc6c210c5dd45ba801a852f14bdc22
   m_configObjects: {}
