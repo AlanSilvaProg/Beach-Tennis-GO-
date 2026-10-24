@@ -8306,7 +8306,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 30.3
+  m_fontSize: 60
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -13720,7 +13720,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 50
+  field of view: 57.5
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -13746,8 +13746,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.25038, y: 0, z: 0, w: 0.96814764}
-  m_LocalPosition: {x: 0, y: 10.149717, z: -21.225359}
+  m_LocalRotation: {x: 0.22580127, y: 0, z: 0, w: 0.97417337}
+  m_LocalPosition: {x: 0, y: 5.243923, z: -13.05002}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -13768,14 +13768,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraRig
   court: {fileID: 1424136727}
   playerRacket: {fileID: 1802069754}
-  lookAt: {x: 0, y: -2.17, z: 1}
-  pitch: 29
-  fieldOfView: 50
+  lookAt: {x: 0, y: 2.04, z: -6.51}
+  pitch: 26.1
+  fieldOfView: 57.5
   referenceAspect: 1.6
-  distanceFactor: 1.156
+  distanceFactor: 0.795
   margin: 0.15
   viewportPadding: 0.02
-  minDistance: 6
+  minDistance: 7.05
   wideStartAspect: 1.9
   wideFullAspect: 2.5
   wideZoom: 0.8
