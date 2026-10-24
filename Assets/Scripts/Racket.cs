@@ -47,6 +47,16 @@ public class Racket : MonoBehaviour
     [Tooltip("Roll (degrees) when the racket is at the side limit; it leans outwards the further it is from the centre.")]
     public float edgeRoll = 40f;
 
+    [Header("Leaning towards the ball")]
+    [Tooltip("While the ball is far away, or going away, the racket leans with the side of the court it is on (Edge Roll). Once the ball is coming and gets this close (m), it leans towards the ball instead.")]
+    public float ballLeanNear = 3f;
+    [Tooltip("The lean towards the ball starts to take over at this distance (m) from the racket.")]
+    public float ballLeanFar = 6f;
+    [Tooltip("Sideways distance (m) between the ball and the racket at which the lean towards the ball is at its full Edge Roll.")]
+    public float ballLeanReach = 1.2f;
+    [Tooltip("How quickly the lean follows its target (higher = snappier).")]
+    public float leanSmoothing = 12f;
+
     public Vector3 Velocity { get; private set; }
     public Vector3 Position => transform.position;
     // Where the racket was at the end of the previous frame. PreviousPosition -> Position is the path swept this frame, so a very fast
@@ -67,6 +77,8 @@ public class Racket : MonoBehaviour
 
     Vector3 lastPos;
     Vector3 smoothVel;
+    float leanRoll;  // the smoothed side lean (degrees)
+    Ball ball;
 
     // Recent unsmoothed velocities (newest last), used to read a fast swipe accurately.
     struct Sample { public float time; public Vector3 v; }
@@ -113,6 +125,17 @@ public class Racket : MonoBehaviour
         model.localPosition = new Vector3(0f, -headCenter * modelScale, 0f);
     }
 
+    // 0 = ignore the ball (it is away, going away, or not in play), 1 = lean fully towards it (it is coming and close).
+    float BallLeanWeight()
+    {
+        if (ball == null) ball = FindFirstObjectByType<Ball>();
+        if (ball == null || !ball.gameObject.activeInHierarchy) return 0f;
+        if (ball.Velocity.z * SideSign <= 0f) return 0f; // not coming towards this side of the net
+        float dx = ball.Position.x - transform.position.x, dz = ball.Position.z - transform.position.z;
+        float distance = Mathf.Sqrt(dx * dx + dz * dz);
+        return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(ballLeanFar, ballLeanNear, distance));
+    }
+
     public Vector3 Clamp(Vector3 p)
     {
         // Distance from the net on this racket's own side; a point beyond the net is held at the net (minDistance).
@@ -150,8 +173,13 @@ public class Racket : MonoBehaviour
         Velocity = smoothVel;
         lastPos = transform.position;
 
-        float roll = Mathf.Clamp(SideSpeed * rollPerSpeed * SideSign, -maxRoll, maxRoll)
-                     + SideSign * Mathf.Clamp(transform.position.x / maxX, -1f, 1f) * edgeRoll;
+        // Side lean: with the side of the court the racket is on, or towards the ball once it is coming close.
+        float fieldLean = SideSign * Mathf.Clamp(transform.position.x / maxX, -1f, 1f) * edgeRoll;
+        float ballWeight = BallLeanWeight();
+        float ballLean = SideSign * Mathf.Clamp((ball != null ? ball.Position.x - transform.position.x : 0f) / Mathf.Max(0.01f, ballLeanReach), -1f, 1f) * edgeRoll;
+        float targetLean = Mathf.Lerp(fieldLean, ballLean, ballWeight);
+        leanRoll = Mathf.Lerp(leanRoll, targetLean, 1f - Mathf.Exp(-dt * leanSmoothing));
+        float roll = Mathf.Clamp(SideSpeed * rollPerSpeed * SideSign, -maxRoll, maxRoll) + leanRoll;
         float pitch = Mathf.Clamp(ForwardSpeed * pitchPerSpeed, -maxPitch, maxPitch) + restPitch;
         transform.rotation = Quaternion.Euler(0f, facingYaw, 0f) * Quaternion.Euler(pitch, 0f, roll);
     }
