@@ -227,8 +227,14 @@ public class GameManager : MonoBehaviour
         hud.SetWinTitle(wonMatch);
         hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         bool lostMatch = state == State.MatchOver && aiScore > playerScore;
+        hud.SetLoseTitle(lostMatch);
         hud.SetLoseButtons(lostMatch, lostMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
-        if (lostMatch && !loseLabelsSet) { hud.SetLoseLabels(I18n.Tr("RESTART"), I18n.Tr("RETRY")); loseLabelsSet = true; }
+        if (lostMatch && !loseLabelsSet)
+        {
+            hud.SetLoseTitleLabels(I18n.Tr("YOU"), I18n.Tr("LOSE"));
+            hud.SetLoseLabels(I18n.Tr("RESTART"), I18n.Tr("RETRY"));
+            loseLabelsSet = true;
+        }
         hud.SetScore(playerScore, aiScore);
         hud.SetTime(matchTime);
         int infoKey = level * 1000 + playerSets * 100 + aiSets * 10 + setsToWin;
@@ -510,7 +516,7 @@ public class GameManager : MonoBehaviour
             if (playerScore > aiScore) playerSets++; else aiSets++;
             if (playerSets >= setsToWin || aiSets >= setsToWin)
             {
-                hud.Banner = playerScore > aiScore ? "" : I18n.Tr("YOU LOSE"); // a win shows the big centred title instead (UpdateHud)
+                hud.Banner = ""; // the win and lose screens show their own big centred titles (UpdateHud)
                 EnterState(State.MatchOver);
                 if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
                 if (poki != null) poki.GameplayStop();

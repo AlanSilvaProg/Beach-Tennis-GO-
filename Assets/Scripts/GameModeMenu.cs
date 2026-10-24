@@ -33,8 +33,8 @@ public class GameModeMenu : MonoBehaviour
     [Tooltip("Black veil behind the window: dims everything and blocks every click behind it (tapping it closes the window).")]
     public Image fade;
     [Range(0f, 1f)] public float fadeAlpha = 0.65f;
-    [Tooltip("Sorting order of the veil; the window is drawn one above it, so both cover the rest of the HUD.")]
-    public int fadeSortingOrder = 50;
+    [Tooltip("Sorting order of the canvas that holds the veil and the window. It is a canvas of its own, above the HUD, so nothing of the HUD can be drawn over them.")]
+    public int modalSortingOrder = 200;
     [Tooltip("How much of the window is on screen when it is open (0.5 = half of it; the other half stays off the left edge).")]
     [Range(0.3f, 1f)] public float visibleFraction = 0.5f;
     [Tooltip("Thickness of the window's frame (canvas units). The three buttons are centred in the space that is on screen and inside the frame.")]
@@ -71,16 +71,15 @@ public class GameModeMenu : MonoBehaviour
         Wire(trainingButton, GameMode.Training);
         Wire(tournamentButton, GameMode.Tournament);
         Wire(onlineButton, GameMode.Online);
+        MoveToModalCanvas();
         if (fade != null)
         {
             var fadeButton = fade.GetComponent<Button>();
             if (fadeButton != null) { fadeButton.onClick.RemoveAllListeners(); fadeButton.onClick.AddListener(CloseWindow); }
-            Overlay(fade.gameObject, fadeSortingOrder);
             fade.gameObject.SetActive(false);
         }
         if (window != null)
         {
-            Overlay(window.gameObject, fadeSortingOrder + 1);
             windowGroup = window.GetComponent<CanvasGroup>();
             if (windowGroup == null) windowGroup = window.gameObject.AddComponent<CanvasGroup>();
         }
@@ -110,14 +109,28 @@ public class GameModeMenu : MonoBehaviour
         if (window != null) CenterButtons(); // keeps them centred while the size / visible part / frame are tweaked in the inspector
     }
 
-    // Draws the object (and its children) above the rest of the HUD: its own canvas with an override sorting order.
-    static void Overlay(GameObject go, int order)
+    // The veil and the window go to a canvas of their own that is drawn after the whole HUD (a higher sorting order), so no text or button of the
+    // HUD, e.g. the win / lose screens, can end up in front of them. It copies the HUD canvas's scaling, so the layout is the same.
+    void MoveToModalCanvas()
     {
+        if (fade == null && window == null) return;
+        var hud = (fade != null ? fade.canvas : window.GetComponentInParent<Canvas>()).rootCanvas;
+        var go = new GameObject("ModalCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = go.GetComponent<Canvas>();
-        if (canvas == null) canvas = go.AddComponent<Canvas>();
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = order;
-        if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = Mathf.Max(modalSortingOrder, hud.sortingOrder + 1);
+        var scaler = go.GetComponent<CanvasScaler>();
+        var source = hud.GetComponent<CanvasScaler>();
+        if (source != null)
+        {
+            scaler.uiScaleMode = source.uiScaleMode;
+            scaler.referenceResolution = source.referenceResolution;
+            scaler.screenMatchMode = source.screenMatchMode;
+            scaler.matchWidthOrHeight = source.matchWidthOrHeight;
+        }
+        if (fade != null) fade.transform.SetParent(go.transform, false);
+        if (window != null) window.SetParent(go.transform, false);
+        if (fade != null) fade.transform.SetAsFirstSibling(); // the veil under the window
     }
 
     void Wire(Button b, GameMode mode)

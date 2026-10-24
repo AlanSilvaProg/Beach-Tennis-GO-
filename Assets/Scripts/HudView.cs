@@ -49,8 +49,17 @@ public class HudView : MonoBehaviour
     public RawImage winBackground;
     [Tooltip("Seconds of the pop-in animation.")]
     public float winPopTime = 0.45f;
-    [Tooltip("Seconds the background takes to fade in.")]
+    [Tooltip("Seconds the backgrounds (win and lose) take to fade in.")]
     public float winBackgroundFade = 0.35f;
+
+    [Header("Lose title (\"YOU LOSE\": white, then red; same look and pop-in as the win title)")]
+    public GameObject loseTitle;
+    public TMP_Text loseLine1;
+    public TMP_Text loseLine2;
+
+    [Header("Lose screen background")]
+    [Tooltip("The same rotating sunburst in tones of red, without the flying dashes; shown with the lose buttons.")]
+    public RawImage loseBackground;
 
     [Header("Text")]
     public TMP_Text infoText;
@@ -120,7 +129,15 @@ public class HudView : MonoBehaviour
     // The two buttons of the lose screen: shown only when `visible`, clickable only when `interactable` (not during the first moments, not during an ad).
     public void SetLoseButtons(bool visible, bool interactable)
     {
-        if (loseButtons != null && loseButtons.activeSelf != visible) loseButtons.SetActive(visible);
+        if (loseButtons != null && loseButtons.activeSelf != visible)
+        {
+            loseButtons.SetActive(visible);
+            if (loseBackground != null)
+            {
+                loseBackground.gameObject.SetActive(visible);
+                var c = loseBackground.color; c.a = 0f; loseBackground.color = c; // fades in from nothing
+            }
+        }
         if (restartButton != null) restartButton.interactable = interactable;
         if (retryButton != null) retryButton.interactable = interactable;
         if (loseBackButton != null) loseBackButton.interactable = interactable;
@@ -132,7 +149,30 @@ public class HudView : MonoBehaviour
         Apply(retryLabel, retry);
     }
 
-    float winShownAt = -10f;
+    float winShownAt = -10f, loseShownAt = -10f;
+
+    // The big "YOU LOSE" title: the same pop-in as the win title.
+    public void SetLoseTitle(bool visible)
+    {
+        if (loseTitle == null || loseTitle.activeSelf == visible) return;
+        loseTitle.SetActive(visible);
+        if (visible) { loseShownAt = Time.unscaledTime; loseTitle.transform.localScale = Vector3.zero; }
+    }
+
+    public void SetLoseTitleLabels(string line1, string line2)
+    {
+        Apply(loseLine1, line1);
+        Apply(loseLine2, line2);
+    }
+
+    // Ease-out-back: overshoots a little, then settles.
+    void PopIn(GameObject title, float shownAt)
+    {
+        if (title == null || !title.activeSelf) return;
+        float k = Mathf.Clamp01((Time.unscaledTime - shownAt) / Mathf.Max(0.05f, winPopTime));
+        float back = 1f + 2.2f * Mathf.Pow(k - 1f, 3f) + 1.2f * Mathf.Pow(k - 1f, 2f);
+        title.transform.localScale = Vector3.one * back;
+    }
 
     // The big "YOU WON" title: pops in (with a small overshoot) when it appears.
     public void SetWinTitle(bool visible)
@@ -175,16 +215,18 @@ public class HudView : MonoBehaviour
 
     void Update()
     {
-        if (winBackground != null && winBackground.gameObject.activeSelf)
-        {
-            var c = winBackground.color;
-            c.a = Mathf.MoveTowards(c.a, 1f, Time.unscaledDeltaTime / Mathf.Max(0.05f, winBackgroundFade));
-            winBackground.color = c;
-        }
-        if (winTitle == null || !winTitle.activeSelf) return;
-        float k = Mathf.Clamp01((Time.unscaledTime - winShownAt) / Mathf.Max(0.05f, winPopTime));
-        float back = 1f + 2.2f * Mathf.Pow(k - 1f, 3f) + 1.2f * Mathf.Pow(k - 1f, 2f); // ease-out-back: overshoots a little, then settles
-        winTitle.transform.localScale = Vector3.one * back;
+        FadeIn(winBackground);
+        FadeIn(loseBackground);
+        PopIn(winTitle, winShownAt);
+        PopIn(loseTitle, loseShownAt);
+    }
+
+    void FadeIn(RawImage background)
+    {
+        if (background == null || !background.gameObject.activeSelf) return;
+        var c = background.color;
+        c.a = Mathf.MoveTowards(c.a, 1f, Time.unscaledDeltaTime / Mathf.Max(0.05f, winBackgroundFade));
+        background.color = c;
     }
 
     public string Info
