@@ -24,7 +24,18 @@ public class ButtonClickSound : MonoBehaviour
         self.source.playOnAwake = false;
         self.source.spatialBlend = 0f; // plain 2D sound
         ChannelMute.Attach(self.source, AudioChannel.Sfx);
-        foreach (var b in FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None)) b.onClick.AddListener(self.Play);
+        foreach (var b in FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            var button = b;
+            button.onClick.AddListener(() => { self.Play(); PokiEvents.Track("ui", "click", "button", NameOf(button)); });
+        }
+    }
+
+    // "Parent/Button" (the parent tells the buttons that share a name, e.g. the switches of the settings rows).
+    static string NameOf(Button b)
+    {
+        var parent = b.transform.parent;
+        return parent != null ? parent.name + "/" + b.name : b.name;
     }
 
     void Play()

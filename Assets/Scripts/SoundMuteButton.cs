@@ -26,6 +26,7 @@ public class SoundMuteButton : MonoBehaviour
     void Toggle()
     {
         Muted = !Muted;
+        PokiEvents.Track("settings", "change", "setting", "sound_muted", "value", Muted);
         try { PlayerPrefs.SetInt(PrefKey, Muted ? 1 : 0); PlayerPrefs.Save(); } catch { }
         Apply();
     }

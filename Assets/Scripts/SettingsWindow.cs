@@ -51,10 +51,10 @@ public class SettingsWindow : MonoBehaviour
     {
         Hook(openButton, Open);
         Hook(closeButton, Close);
-        Hook(pointsLess, () => { GameSettings.StepPoints(-1); Refresh(); });
-        Hook(pointsMore, () => { GameSettings.StepPoints(+1); Refresh(); });
-        Hook(setsLess, () => { GameSettings.StepSets(-1); Refresh(); });
-        Hook(setsMore, () => { GameSettings.StepSets(+1); Refresh(); });
+        Hook(pointsLess, () => { GameSettings.StepPoints(-1); Refresh(); PokiEvents.Track("settings", "change", "setting", "points_to_win", "value", GameSettings.PointsToWin); });
+        Hook(pointsMore, () => { GameSettings.StepPoints(+1); Refresh(); PokiEvents.Track("settings", "change", "setting", "points_to_win", "value", GameSettings.PointsToWin); });
+        Hook(setsLess, () => { GameSettings.StepSets(-1); Refresh(); PokiEvents.Track("settings", "change", "setting", "sets_to_win", "value", GameSettings.SetsToWin); });
+        Hook(setsMore, () => { GameSettings.StepSets(+1); Refresh(); PokiEvents.Track("settings", "change", "setting", "sets_to_win", "value", GameSettings.SetsToWin); });
         Hook(voiceButton, () => Toggle(AudioChannel.Voice));
         Hook(musicButton, () => Toggle(AudioChannel.Music));
         Hook(sfxButton, () => Toggle(AudioChannel.Sfx));
@@ -79,8 +79,8 @@ public class SettingsWindow : MonoBehaviour
         if (!Mathf.Approximately(content.sizeDelta.x, width)) content.sizeDelta = new Vector2(width, content.sizeDelta.y);
     }
 
-    public void Open() { if (window == null) return; window.SetActive(true); window.transform.SetAsLastSibling(); FitContent(); Refresh(); }
-    public void Close() { if (window != null) window.SetActive(false); }
+    public void Open() { if (window == null) return; PokiEvents.Track("settings", "open"); window.SetActive(true); window.transform.SetAsLastSibling(); FitContent(); Refresh(); }
+    public void Close() { if (window != null && window.activeSelf) PokiEvents.Track("settings", "close"); if (window != null) window.SetActive(false); }
 
     // The gear is hidden while the window covers the screen.
     public void SetButtonVisible(bool visible)
@@ -94,6 +94,7 @@ public class SettingsWindow : MonoBehaviour
     {
         GameSettings.SetMuted(channel, !GameSettings.IsMuted(channel));
         Refresh();
+        PokiEvents.Track("settings", "change", "setting", channel.ToString().ToLowerInvariant() + "_muted", "value", GameSettings.IsMuted(channel));
     }
 
     // Texts follow the language (it can be set after Awake), values follow the settings.

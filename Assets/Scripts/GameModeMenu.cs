@@ -144,8 +144,15 @@ public class GameModeMenu : MonoBehaviour
     float ClosedX => -WindowWidth - 60f;
     float OpenX => -WindowWidth * (1f - visibleFraction);
 
-    public void ToggleWindow() { WindowOpen = !WindowOpen; }
-    public void CloseWindow() { WindowOpen = false; }
+    public void ToggleWindow() { SetWindow(!WindowOpen); }
+    public void CloseWindow() { SetWindow(false); }
+
+    void SetWindow(bool open)
+    {
+        if (WindowOpen == open) return;
+        WindowOpen = open;
+        PokiEvents.Track("mode_menu", open ? "open" : "close");
+    }
 
     // The menu is only visible outside a match (and on the win screen, without the mode name); hiding it also closes the window.
     public void SetVisible(bool visible, bool showLabel = true)
@@ -160,6 +167,7 @@ public class GameModeMenu : MonoBehaviour
     void Select(GameMode mode)
     {
         ModeSelected?.Invoke(mode);
+        PokiEvents.Track("mode", "select", "mode", mode.ToString(), "available", mode == GameMode.Training);
         if (mode != GameMode.Training) return; // not implemented yet
         Mode = mode;
         Refresh();

@@ -46,3 +46,8 @@ Ao perder a partida a tela mostra, juntos, dois botões (objeto `LoseButtons` no
 - Sem branding/anúncios externos, sem links externos (não precisa de política de privacidade in-game).
 - Tela de carregamento com logo próprio e barra de progresso; download inicial pequeno (~8 MB zip; vozes só do idioma do jogador).
 - Pendentes (fora do escopo desta etapa): thumbnails estática e animada, teste no ambiente real da Poki, save de progresso (não há progresso persistente; o jogo é partida a partida).
+
+## Eventos customizados (comportamento do jogador)
+`PokiEvents.Track(noun, verb, pares nome/valor...)` (`Assets/Scripts/PokiEvents.cs`, ponte `Assets/Plugins/WebGL/PokiEvents.jslib`) chama `PokiSDK.customEvent(noun, verb, dados)`. No editor só escreve no Console (`[PokiEvent] ...`); sem o SDK na página não faz nada. A lista completa fica no comentário do topo de `PokiEvents.cs`:
+`game/loaded` · `ui/click` (todo botão) · `mode_menu/open|close` · `mode/select` · `settings/open|close|change` · `match/tap_to_play|start|end|continue|restart|retry|back` · `set/end` · `level/reached|complete|failed`.
+Ao criar um evento novo, acrescente a linha no comentário de `PokiEvents.cs` e aqui.

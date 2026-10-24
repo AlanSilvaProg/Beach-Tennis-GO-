@@ -100,6 +100,8 @@ public class GameManager : MonoBehaviour
     float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
     bool loseLabelsSet, winLabelsSet, namesSet, backLabelsSet;
+    string startReason = "menu"; // why the next match starts (for the Poki events): menu, next_level, restart, retry
+    int highestLevelSeen;
     float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
@@ -134,6 +136,7 @@ public class GameManager : MonoBehaviour
             hud.BackClicked -= OnBackClicked; hud.BackClicked += OnBackClicked;
         }
         ChannelMute.Attach(sfx, AudioChannel.Sfx);
+        PokiEvents.Track("game", "loaded", "language", I18n.Code);
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
@@ -251,6 +254,8 @@ public class GameManager : MonoBehaviour
     // Poki: an ad break comes before every start of gameplay (it only plays when Poki decides it is time), then the match starts.
     void BeginMatch()
     {
+        PokiEvents.Track("match", "tap_to_play", "level", level);
+        startReason = "menu";
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
 
@@ -260,6 +265,8 @@ public class GameManager : MonoBehaviour
     void OnContinueClicked()
     {
         if (!CanUseContinue) return;
+        PokiEvents.Track("match", "continue", "level", level, "next_level", level + 1);
+        startReason = "next_level";
         level++;
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
@@ -268,6 +275,7 @@ public class GameManager : MonoBehaviour
     void OnBackClicked()
     {
         if (state != State.MatchOver || stateTimer <= matchOverInputDelay || PokiService.AdPlaying) return;
+        PokiEvents.Track("match", "back", "from", playerScore > aiScore ? "win" : "lose", "level", level);
         ReturnToMenu();
     }
 
@@ -277,6 +285,8 @@ public class GameManager : MonoBehaviour
     void OnRestartClicked()
     {
         if (!CanUseLoseButtons) return;
+        PokiEvents.Track("match", "restart", "level", level);
+        startReason = "restart";
         level = startLevel;
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
@@ -285,9 +295,11 @@ public class GameManager : MonoBehaviour
     void OnRetryClicked()
     {
         if (!CanUseLoseButtons) return;
-        if (poki == null) { retryNoticeUntil = Time.time + 2f; StartMatch(); return; }
+        startReason = "retry";
+        if (poki == null) { PokiEvents.Track("match", "retry", "level", level, "granted", true); retryNoticeUntil = Time.time + 2f; StartMatch(); return; }
         poki.RewardedBreak(granted =>
         {
+            PokiEvents.Track("match", "retry", "level", level, "granted", granted);
             if (!granted || state != State.MatchOver) return;
             retryNoticeUntil = Time.time + 2f; // visible confirmation of the reward
             StartMatch();
@@ -298,6 +310,8 @@ public class GameManager : MonoBehaviour
     {
         pointsToWin = GameSettings.PointsToWin;
         setsToWin = GameSettings.SetsToWin;
+        PokiEvents.Track("match", "start", "level", level, "points_to_win", pointsToWin, "sets_to_win", setsToWin, "reason", startReason);
+        if (level > highestLevelSeen) { highestLevelSeen = level; PokiEvents.Track("level", "reached", "level", level); }
         playerScore = aiScore = 0;
         playerSets = aiSets = 0;
         newSetPending = false;
@@ -514,8 +528,14 @@ public class GameManager : MonoBehaviour
         if (setOver)
         {
             if (playerScore > aiScore) playerSets++; else aiSets++;
+            bool matchWon = playerScore > aiScore;
+            PokiEvents.Track("set", "end", "level", level, "set_number", playerSets + aiSets, "winner", matchWon ? "player" : "cpu",
+                             "player_points", playerScore, "cpu_points", aiScore, "player_sets", playerSets, "cpu_sets", aiSets);
             if (playerSets >= setsToWin || aiSets >= setsToWin)
             {
+                PokiEvents.Track("match", "end", "result", matchWon ? "win" : "lose", "level", level, "duration_s", Mathf.RoundToInt(matchTime),
+                                 "player_sets", playerSets, "cpu_sets", aiSets, "player_points", playerScore, "cpu_points", aiScore);
+                PokiEvents.Track("level", matchWon ? "complete" : "failed", "level", level);
                 hud.Banner = ""; // the win and lose screens show their own big centred titles (UpdateHud)
                 EnterState(State.MatchOver);
                 if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
