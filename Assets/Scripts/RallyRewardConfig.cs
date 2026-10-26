@@ -1,0 +1,55 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+// The rules of the Rally coin reward of a match and their values (Assets/Data/RallyRewardConfig.asset). A bonus with an amount of 0 is switched off.
+// To add a bonus: a field here and a line in Calculate.
+[CreateAssetMenu(fileName = "RallyRewardConfig", menuName = "Beach Tennis GO/Rally Reward Config")]
+public class RallyRewardConfig : ScriptableObject
+{
+    [Header("Victory")]
+    [Tooltip("Coins for winning a match.")]
+    public int victoryBase = 100;
+    [Tooltip("Extra coins for every level above the first.")]
+    public int victoryPerLevel = 10;
+
+    [Header("Bonuses")]
+    [Tooltip("PERFECT MATCH: the CPU did not score a single point in the whole match.")]
+    public int perfectMatch = 60;
+    [Tooltip("PERFECT SET: coins for every set won without the CPU scoring (only when it is not a perfect match and the match had more than one set).")]
+    public int perfectSet = 25;
+    [Tooltip("BIG LEAD: the last set was won by at least this many points of difference (not given with a perfect match).")]
+    public int bigLeadMargin = 6;
+    public int bigLead = 30;
+    [Tooltip("LONG MATCH: the match lasted at least this many seconds.")]
+    public int longMatchSeconds = 180;
+    public int longMatch = 25;
+    [Tooltip("PERFECT RALLY: the longest point had at least this many racket hits.")]
+    public int perfectRallyHits = 12;
+    public int perfectRally = 20;
+    [Tooltip("COMEBACK: the player was behind by at least this many points in a set (or lost a set) and still won the match.")]
+    public int comebackDeficit = 4;
+    public int comeback = 40;
+
+    // The list of lines (victory first) and, in `total`, their sum. A match that was lost pays nothing.
+    public List<RewardLine> Calculate(MatchStats s, out int total)
+    {
+        var lines = new List<RewardLine>();
+        total = 0;
+        if (!s.won) return lines;
+        Add(lines, "VICTORY BONUS", victoryBase + victoryPerLevel * Mathf.Max(0, s.level - 1));
+        bool perfect = s.cpuPoints == 0;
+        if (perfect) Add(lines, "PERFECT MATCH", perfectMatch);
+        else if (s.playerSets + s.cpuSets > 1 && s.perfectSets > 0) Add(lines, "PERFECT SET", perfectSet * s.perfectSets);
+        if (!perfect && s.lastSetPlayerPoints - s.lastSetCpuPoints >= bigLeadMargin) Add(lines, "BIG LEAD", bigLead);
+        if (s.duration >= longMatchSeconds) Add(lines, "LONG MATCH", longMatch);
+        if (s.longestRally >= perfectRallyHits) Add(lines, "PERFECT RALLY", perfectRally);
+        if (s.maxDeficit >= comebackDeficit || s.cpuSets > 0) Add(lines, "COMEBACK", comeback);
+        foreach (var l in lines) total += l.amount;
+        return lines;
+    }
+
+    static void Add(List<RewardLine> lines, string label, int amount)
+    {
+        if (amount > 0) lines.Add(new RewardLine { label = label, amount = amount });
+    }
+}

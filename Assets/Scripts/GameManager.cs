@@ -23,6 +23,14 @@ public class GameManager : MonoBehaviour
     public ParticleSystem confetti;
     [Tooltip("Settings window (points / sets to win, sound switches) and its gear button.")]
     public SettingsWindow settings;
+    [Tooltip("Rackets window (and its button): the skin on the player's racket and the new racket screen.")]
+    public RacketSelection rackets;
+    [Tooltip("Seconds the scoreboard hangs down when a match starts, before it is pulled up to show only the clock.")]
+    public float scoreboardRevealTime = 1.6f;
+    [Header("Rally coin reward (win screen)")]
+    [Tooltip("The rules and values of the reward of a won match (Assets/Data/RallyRewardConfig.asset).")]
+    public RallyRewardConfig rewardConfig;
+    public WinRewardPanel rewardPanel;
 
     public enum LanguageChoice { Auto, English, Portuguese, Spanish }
 
@@ -104,6 +112,8 @@ public class GameManager : MonoBehaviour
     int highestLevelSeen;
     float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
+    float scoreboardRevealUntil; // the board stays down until then (it drops when a match starts)
+    MatchStats stats; // what happened in the match so far (for the reward)
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
     float rallyTime;
     float accumulator;
@@ -161,7 +171,6 @@ public class GameManager : MonoBehaviour
         switch (state)
         {
             case State.Menu:
-                hud.ShowScore = false;
                 hud.Banner = ""; // no text: the TapHint hand shows what to do
                 // A tap on the menu's own buttons is not a "play" tap; with the mode window open, a tap elsewhere only closes it.
                 if (Pressed() && !PointerOverUi())
@@ -224,11 +233,14 @@ public class GameManager : MonoBehaviour
     void UpdateHud()
     {
         if (!namesSet) { hud.SetNames(I18n.Tr("PLAYER"), "CPU"); namesSet = true; }
-        hud.ShowScore = state == State.PointOver || state == State.MatchOver; // only while the point (or the match result) is announced
+        // The board hangs out of sight in the menu, drops when a match starts (and for every point and result), and in between stays pulled up
+        // with only the clock showing.
+        bool revealing = state == State.PointOver || state == State.MatchOver || Time.unscaledTime < scoreboardRevealUntil;
+        hud.SetScoreboard(state == State.Menu ? HangingSign.SignState.Hidden : revealing ? HangingSign.SignState.Shown : HangingSign.SignState.Peek);
         bool wonMatch = state == State.MatchOver && playerScore > aiScore;
-        if (menu != null) menu.SetVisible(state == State.Menu || wonMatch, state == State.Menu); // the win screen also offers the Game mode button
+        if (menu != null) menu.SetVisible(state == State.Menu, true); // the Game mode button is for the menu only (not on the result screens)
         if (state == State.MatchOver && !backLabelsSet) { hud.SetBackLabels(I18n.Tr("BACK")); backLabelsSet = true; }
-        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), I18n.Tr("WON"), I18n.Tr("CONTINUE")); winLabelsSet = true; }
+        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), WonText(), I18n.Tr("CONTINUE")); winLabelsSet = true; }
         hud.SetWinTitle(wonMatch);
         hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         bool lostMatch = state == State.MatchOver && aiScore > playerScore;
@@ -251,6 +263,13 @@ public class GameManager : MonoBehaviour
         }
         hud.Info = info;
         if (settings != null) settings.SetButtonVisible(state == State.Menu || state == State.MatchOver);
+        if (rackets != null) rackets.SetButtonVisible((state == State.Menu || (state == State.MatchOver && !wonMatch)) && (settings == null || !settings.IsOpen));
+    }
+
+    static string WonText()
+    {
+        string won = I18n.Tr("WON");
+        return won.EndsWith("!") ? won : won + "!";
     }
 
     // Poki: an ad break comes before every start of gameplay (it only plays when Poki decides it is time), then the match starts.
@@ -313,11 +332,14 @@ public class GameManager : MonoBehaviour
         pointsToWin = GameSettings.PointsToWin;
         setsToWin = GameSettings.SetsToWin;
         PokiEvents.Track("match", "start", "level", level, "points_to_win", pointsToWin, "sets_to_win", setsToWin, "reason", startReason);
+        RacketProgress.ReportTrainingLevel(level); // Training is the only mode so far; rackets that unlock by level
         if (level > highestLevelSeen) { highestLevelSeen = level; PokiEvents.Track("level", "reached", "level", level); }
         playerScore = aiScore = 0;
         playerSets = aiSets = 0;
         newSetPending = false;
         matchTime = 0f;
+        scoreboardRevealUntil = Time.unscaledTime + scoreboardRevealTime;
+        stats = new MatchStats { level = level };
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         if (poki != null) poki.GameplayStart(); // the player's first input of the match
         server = 0;
@@ -325,6 +347,20 @@ public class GameManager : MonoBehaviour
         player.ResetPosition();
         ai.ResetPosition();
         PrepareServe();
+    }
+
+    // The Rally coins of a won match: worked out from what happened, added to the player's coins and listed on the win screen.
+    void GiveReward()
+    {
+        stats.won = true;
+        stats.playerSets = playerSets; stats.cpuSets = aiSets;
+        stats.lastSetPlayerPoints = playerScore; stats.lastSetCpuPoints = aiScore;
+        stats.duration = matchTime;
+        if (rewardConfig == null) rewardConfig = ScriptableObject.CreateInstance<RallyRewardConfig>(); // the defaults
+        var lines = rewardConfig.Calculate(stats, out int total);
+        RallyCoins.Add(total);
+        if (rewardPanel != null) rewardPanel.Show(lines, total);
+        PokiEvents.Track("reward", "match", "coins", total, "bonuses", lines.Count - 1);
     }
 
     void EnterState(State s)
@@ -524,7 +560,9 @@ public class GameManager : MonoBehaviour
     void Score(int winner)
     {
         if (state != State.Rally) return;
-        if (winner == 0) playerScore++; else aiScore++;
+        if (winner == 0) { playerScore++; stats.playerPoints++; } else { aiScore++; stats.cpuPoints++; }
+        stats.longestRally = Mathf.Max(stats.longestRally, hitsInPoint);
+        stats.maxDeficit = Mathf.Max(stats.maxDeficit, aiScore - playerScore);
         hud.Banner = winner == 0 ? I18n.Tr("Point!") : I18n.Tr("CPU point");
         Bleachers.Cheer(winner == 0 ? 0.9f : 0.4f); // the crowd reacts to every point (more to the player's)
         bool setOver = IsMatchOver(playerScore, aiScore);
@@ -532,6 +570,7 @@ public class GameManager : MonoBehaviour
         {
             if (playerScore > aiScore) playerSets++; else aiSets++;
             bool matchWon = playerScore > aiScore;
+            if (matchWon && aiScore == 0) stats.perfectSets++;
             PokiEvents.Track("set", "end", "level", level, "set_number", playerSets + aiSets, "winner", matchWon ? "player" : "cpu",
                              "player_points", playerScore, "cpu_points", aiScore, "player_sets", playerSets, "cpu_sets", aiSets);
             if (playerSets >= setsToWin || aiSets >= setsToWin)
@@ -539,6 +578,8 @@ public class GameManager : MonoBehaviour
                 PokiEvents.Track("match", "end", "result", matchWon ? "win" : "lose", "level", level, "duration_s", Mathf.RoundToInt(matchTime),
                                  "player_sets", playerSets, "cpu_sets", aiSets, "player_points", playerScore, "cpu_points", aiScore);
                 PokiEvents.Track("level", matchWon ? "complete" : "failed", "level", level);
+                if (matchWon) RacketProgress.ReportTrainingLevel(level + 1); // the next level is reached: rackets may unlock (the new racket screen follows)
+                if (matchWon) GiveReward();
                 hud.Banner = ""; // the win and lose screens show their own big centred titles (UpdateHud)
                 EnterState(State.MatchOver);
                 if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title

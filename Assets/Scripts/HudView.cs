@@ -67,7 +67,6 @@ public class HudView : MonoBehaviour
 
     string info = "", banner = "";
     int player = -1, npc = -1, shownSeconds = -1;
-    bool showScore;
 
     void Awake()
     {
@@ -79,18 +78,15 @@ public class HudView : MonoBehaviour
         SetLoseButtons(false, false);
         Apply(infoText, info);
         Apply(bannerText, banner);
-        SetScoreVisible(showScore);
+        SetScoreboard(HangingSign.SignState.Hidden);
     }
 
-    public bool ShowScore
+    // Where the board hangs (see HangingSign): Hidden in the menus, Peek (only the clock shows) during the rounds, Shown for a point or a result.
+    public void SetScoreboard(HangingSign.SignState state)
     {
-        get => showScore;
-        set
-        {
-            if (showScore == value) return;
-            showScore = value;
-            SetScoreVisible(value);
-        }
+        if (scoreboardSign != null) scoreboardSign.SetState(state);
+        else if (board != null) board.SetActive(state != HangingSign.SignState.Hidden);
+        if (infoText != null) infoText.enabled = state == HangingSign.SignState.Shown;
     }
 
     public void SetScore(int playerPoints, int npcPoints)
@@ -239,13 +235,6 @@ public class HudView : MonoBehaviour
     {
         get => banner;
         set { if (banner == value) return; banner = value; Apply(bannerText, value); }
-    }
-
-    void SetScoreVisible(bool visible)
-    {
-        if (scoreboardSign != null) scoreboardSign.Show(visible);
-        else if (board != null) board.SetActive(visible);
-        if (infoText != null) infoText.enabled = visible;
     }
 
     static void Apply(TMP_Text t, string value)
