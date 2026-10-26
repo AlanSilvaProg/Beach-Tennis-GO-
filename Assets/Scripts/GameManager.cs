@@ -171,8 +171,8 @@ public class GameManager : MonoBehaviour
                 }
                 break;
             case State.Serving:
-                hud.Banner = (Time.time < retryNoticeUntil ? I18n.Tr("Retry!") + "\n" : "") + (server == 0 ? I18n.Tr("Your serve\nSwing the racket at the ball") : I18n.Tr("CPU serve"));
-                if (server == 0) { TryPlayerServe(); if (!serveArmed) hud.Banner += "\n" + I18n.Tr("(pull the racket back first)"); }
+                hud.Banner = Time.time < retryNoticeUntil ? I18n.Tr("Retry!") : ""; // no text about who serves or how: the ServeHint ghost teaches it
+                if (server == 0) TryPlayerServe();
                 else if (stateTimer > serveDelay) TryAiServe();
                 break;
             case State.Rally:

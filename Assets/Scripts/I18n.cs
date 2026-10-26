@@ -104,9 +104,6 @@ public static class I18n
 
     static readonly Dictionary<string, string> Pt = new Dictionary<string, string>
     {
-        { "Your serve\nSwing the racket at the ball", "Seu saque\nBata com a raquete na bola" },
-        { "CPU serve", "Saque da CPU" },
-        { "(pull the racket back first)", "(puxe a raquete para trás primeiro)" },
         { "Point!", "Ponto!" },
         { "CPU point", "Ponto da CPU" },
         { "SETTINGS", "CONFIGURAÇÕES" },
@@ -137,9 +134,6 @@ public static class I18n
 
     static readonly Dictionary<string, string> Es = new Dictionary<string, string>
     {
-        { "Your serve\nSwing the racket at the ball", "Tu saque\nGolpea la pelota con la raqueta" },
-        { "CPU serve", "Saque de la CPU" },
-        { "(pull the racket back first)", "(echa la raqueta hacia atrás primero)" },
         { "Point!", "¡Punto!" },
         { "CPU point", "Punto de la CPU" },
         { "YOU", "¡HAS" },
