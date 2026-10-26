@@ -8306,7 +8306,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 30.3
+  m_fontSize: 60
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -8896,6 +8896,14 @@ PrefabInstance:
     - target: {fileID: 3141296922013813530, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: m_Name
       value: PlayerRacket
+      objectReference: {fileID: 0}
+    - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
+      propertyPath: hitHeight
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
+      propertyPath: hitRadius
+      value: 0.85
       objectReference: {fileID: 0}
     - target: {fileID: 7515083952364050911, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: cam
@@ -13747,7 +13755,7 @@ Transform:
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
   m_LocalRotation: {x: 0.15212339, y: 0, z: 0, w: 0.98836154}
-  m_LocalPosition: {x: 0, y: 6.0997066, z: -18.155502}
+  m_LocalPosition: {x: 0, y: 6.32439, z: -18.868107}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -13787,6 +13795,10 @@ MonoBehaviour:
   maxPullback: 1.3
   serveDistanceFactor: 1.033
   moveSmoothTime: 0.2
+  lookBehindLine: 1
+  behindLine: 3.5
+  deepBallZone: 3
+  behindPullback: 1.5
   previewServing: 1
 --- !u!1 &1353002720
 GameObject:

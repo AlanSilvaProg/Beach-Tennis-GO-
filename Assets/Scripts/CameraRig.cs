@@ -64,6 +64,16 @@ public class CameraRig : MonoBehaviour
     [Tooltip("How long the camera takes to catch up with its target (s). Lower = faster.")]
     [Min(0.01f)] public float moveSmoothTime = 0.2f;
 
+    [Header("Look behind the baseline")]
+    [Tooltip("Back off on its own, without waiting for the racket to reach the edge of the screen, when the player serves or a ball is about to land near or behind the player's baseline.")]
+    public bool lookBehindLine = true;
+    [Tooltip("How much of the area behind the baseline must be visible (m).")]
+    public float behindLine = 3.5f;
+    [Tooltip("A ball predicted to land this close to the baseline (m), or beyond it, makes the camera back off.")]
+    public float deepBallZone = 3f;
+    [Tooltip("Furthest the camera may back off for this, as a multiple of the base distance (the Max Pullback above still applies to the racket).")]
+    [Range(1f, 2f)] public float behindPullback = 1.5f;
+
     [Header("Editor preview")]
     [Tooltip("Edit mode only: preview the serve view (true) or the rally view (false).")]
     public bool previewServing = true;
@@ -71,6 +81,11 @@ public class CameraRig : MonoBehaviour
     const int PullbackSteps = 12;
 
     Camera cam;
+    GameManager game;
+    Ball ball;
+    // Points that must be visible besides the racket (the area behind the baseline); worked out every frame.
+    Vector3 focusA, focusB;
+    bool hasFocusA, hasFocusB;
     Vector3 velocity;
     float fitDistance;
     float aspectFactor = 1f;
@@ -125,9 +140,57 @@ public class CameraRig : MonoBehaviour
 
     float BaseDistance => Mathf.Max(minDistance, fitDistance * distanceFactor * aspectFactor);
 
-    // Where the camera wants to be: panned to the racket, then backed off until the racket fits.
+    // Works out which points behind the baseline must be on screen right now: the serve spot (player serving), or where the ball will land
+    // when that is deep (near or past the baseline).
+    void UpdateFocus()
+    {
+        hasFocusA = hasFocusB = false;
+        if (!lookBehindLine || court == null || playerRacket == null) return;
+        float baseZ = -(court.halfLength);
+
+        bool playerServes;
+        if (Application.isPlaying)
+        {
+            if (game == null) game = FindFirstObjectByType<GameManager>();
+            playerServes = game != null && game.PlayerServing;
+        }
+        else playerServes = previewServing;
+        if (playerServes)
+        {
+            focusA = new Vector3(playerRacket.Position.x, 0f, baseZ - behindLine);
+            hasFocusA = true;
+        }
+
+        if (!Application.isPlaying) return;
+        if (ball == null) ball = FindFirstObjectByType<Ball>();
+        if (ball == null || !ball.gameObject.activeInHierarchy || ball.Velocity.z >= -0.1f) return; // not coming towards the player's side
+        if (PredictLanding(out Vector3 land) && land.z < baseZ + deepBallZone)
+        {
+            focusB = new Vector3(land.x, 0f, Mathf.Min(land.z, baseZ) - behindLine);
+            hasFocusB = true;
+        }
+    }
+
+    // Where the ball touches the ground if nothing gets in its way (gravity only; the ball's own physics ignore anything else too).
+    bool PredictLanding(out Vector3 land)
+    {
+        land = Vector3.zero;
+        float g = Mathf.Max(0.01f, ball.gravity);
+        float groundY = (court != null ? court.groundY : 0f) + ball.radius;
+        float a = -0.5f * g, b = ball.Velocity.y, c = ball.Position.y - groundY;
+        float disc = b * b - 4f * a * c;
+        if (disc < 0f) return false;
+        float t = (-b - Mathf.Sqrt(disc)) / (2f * a);
+        if (t <= 0f) t = (-b + Mathf.Sqrt(disc)) / (2f * a);
+        if (t <= 0f) return false;
+        land = new Vector3(ball.Position.x + ball.Velocity.x * t, groundY, ball.Position.z + ball.Velocity.z * t);
+        return true;
+    }
+
+    // Where the camera wants to be: panned to the racket, then backed off until the racket (and, when needed, the area behind the baseline) fits.
     Vector3 Target()
     {
+        UpdateFocus();
         float pan = 0f;
         if (playerRacket != null) pan = Mathf.Clamp(playerRacket.Position.x * followX, -maxPan, maxPan);
         Vector3 centre = lookAt + new Vector3(pan, 0f, 0f);
@@ -135,6 +198,7 @@ public class CameraRig : MonoBehaviour
         bool serve = Application.isPlaying ? serving : previewServing;
         float lo = BaseDistance * (serve ? serveDistanceFactor : 1f);
         float hi = Mathf.Max(lo, BaseDistance * maxPullback);
+        if (hasFocusA || hasFocusB) hi = Mathf.Max(hi, BaseDistance * behindPullback);
         float d = hi;
         for (int i = 0; i <= PullbackSteps; i++)
         {
@@ -147,6 +211,8 @@ public class CameraRig : MonoBehaviour
     // Is the racket (its hit circle) inside the padded screen if the camera sits at `pos`?
     bool RacketVisible(Vector3 pos)
     {
+        if (hasFocusA && !Inside(focusA, pos)) return false;
+        if (hasFocusB && !Inside(focusB, pos)) return false;
         if (playerRacket == null) return true;
         Vector3 c = playerRacket.Position;
         float r = playerRacket.hitRadius;

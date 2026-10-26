@@ -119,6 +119,8 @@ public class GameManager : MonoBehaviour
     public PlayerRacketController Player => player;
     public bool AiShouldChase => state == State.Rally && lastHitter == 0;
     public bool InMenu => state == State.Menu;
+    // The player is about to serve (the CameraRig backs off to show the area behind the baseline).
+    public bool PlayerServing => state == State.Serving && server == 0;
     // A match is on: serving, rallying or pausing between points (not the menu or the result screens).
     public bool MatchOn => state == State.Serving || state == State.Rally || state == State.PointOver;
     public bool AiServing => state == State.Serving && server == 1;
