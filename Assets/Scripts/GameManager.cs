@@ -526,6 +526,7 @@ public class GameManager : MonoBehaviour
         if (state != State.Rally) return;
         if (winner == 0) playerScore++; else aiScore++;
         hud.Banner = winner == 0 ? I18n.Tr("Point!") : I18n.Tr("CPU point");
+        Bleachers.Cheer(winner == 0 ? 0.9f : 0.4f); // the crowd reacts to every point (more to the player's)
         bool setOver = IsMatchOver(playerScore, aiScore);
         if (setOver)
         {
@@ -542,6 +543,7 @@ public class GameManager : MonoBehaviour
                 EnterState(State.MatchOver);
                 if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
                 if (poki != null) poki.GameplayStop();
+                Bleachers.Cheer(matchWon ? 1f : 0.3f);
                 PlayCrowd();
                 return;
             }
