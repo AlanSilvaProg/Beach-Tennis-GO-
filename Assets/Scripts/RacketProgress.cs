@@ -12,6 +12,7 @@ public static class RacketProgress
     static readonly HashSet<string> seen = new HashSet<string>();     // ids the player has already looked at in the Rackets window
     static string equipped = "";
     static int highestLevel = 1;
+    static int onlineWins, tournamentWins;
     static bool loaded;
     static RacketCatalog catalog;
 
@@ -63,6 +64,29 @@ public static class RacketProgress
         Evaluate();
     }
 
+    // The player won a match of the Online mode: rackets that unlock by online wins may unlock.
+    public static void ReportOnlineWin()
+    {
+        Load();
+        onlineWins++;
+        Save();
+        Evaluate();
+    }
+
+    public static int OnlineWins { get { Load(); return onlineWins; } }
+
+    // The player won a tournament. The Tournament mode does not exist yet: whoever makes it calls this when a tournament is won (the racket that
+    // needs a tournament win, "champion", unlocks and the new racket screen follows).
+    public static void ReportTournamentWin()
+    {
+        Load();
+        tournamentWins++;
+        Save();
+        Evaluate();
+    }
+
+    public static int TournamentWins { get { Load(); return tournamentWins; } }
+
     // Rackets whose rule is met by the saved progress get unlocked.
     static void Evaluate()
     {
@@ -78,6 +102,8 @@ public static class RacketProgress
         {
             case UnlockKind.Always: return true;
             case UnlockKind.TrainingLevel: return highestLevel >= rule.value;
+            case UnlockKind.OnlineWins: return onlineWins >= rule.value;
+            case UnlockKind.TournamentWins: return tournamentWins >= rule.value;
             default: return false; // Manual: only Unlock(id)
         }
     }
@@ -136,7 +162,7 @@ public static class RacketProgress
     // For tests: forget everything.
     public static void ResetAll()
     {
-        unlocked.Clear(); seen.Clear(); equipped = ""; highestLevel = 1; loaded = true;
+        unlocked.Clear(); seen.Clear(); equipped = ""; highestLevel = 1; onlineWins = 0; tournamentWins = 0; loaded = true;
         Save();
         if (catalog != null) { Evaluate(); equipped = FirstOwnedId(); Save(); }
     }
@@ -151,6 +177,8 @@ public static class RacketProgress
             Fill(seen, PlayerPrefs.GetString("racketSeen", ""));
             equipped = PlayerPrefs.GetString("racketEquipped", "");
             highestLevel = Mathf.Max(1, PlayerPrefs.GetInt("racketHighestLevel", 1));
+            onlineWins = Mathf.Max(0, PlayerPrefs.GetInt("racketOnlineWins", 0));
+            tournamentWins = Mathf.Max(0, PlayerPrefs.GetInt("racketTournamentWins", 0));
         }
         catch { }
     }
@@ -169,6 +197,8 @@ public static class RacketProgress
             PlayerPrefs.SetString("racketSeen", string.Join(",", seen));
             PlayerPrefs.SetString("racketEquipped", equipped);
             PlayerPrefs.SetInt("racketHighestLevel", highestLevel);
+            PlayerPrefs.SetInt("racketOnlineWins", onlineWins);
+            PlayerPrefs.SetInt("racketTournamentWins", tournamentWins);
             PlayerPrefs.Save();
         }
         catch { }
@@ -176,5 +206,5 @@ public static class RacketProgress
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { loaded = false; catalog = null; Unlocked = null; Changed = null; unlocked.Clear(); seen.Clear(); } // static state survives a Play without domain reload
+    static void ResetStatics() { loaded = false; catalog = null; Unlocked = null; Changed = null; unlocked.Clear(); seen.Clear(); onlineWins = 0; tournamentWins = 0; } // static state survives a Play without domain reload
 }

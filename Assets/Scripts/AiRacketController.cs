@@ -89,13 +89,13 @@ public class AiRacketController : RacketController
     int recentCount, recentHead;
     readonly float[] scores = new float[GridX * GridZ];
 
-    float speed, error, mistake, shotMistake, reaction, flight, aimNoise;
+    protected float speed, error, mistake, shotMistake, reaction, flight, aimNoise;
     int currentLevel = 1;
-    float reactTimer;
-    Vector3 errorVec;
-    bool blunder;
+    protected float reactTimer;
+    protected Vector3 errorVec;
+    protected bool blunder;
 
-    public void SetLevel(int level)
+    public virtual void SetLevel(int level)
     {
         int l = Mathf.Clamp(level, 1, 12);
         currentLevel = l;
@@ -116,7 +116,7 @@ public class AiRacketController : RacketController
 
     public void DelayReaction(float seconds) { reactTimer = seconds; }
 
-    Vector3 ReadyPosition(GameManager gm)
+    protected Vector3 ReadyPosition(GameManager gm)
     {
         float x = gm.Player.Racket.Position.x * readyFollowX;
         return new Vector3(x, Racket.height, restPosition.z);
@@ -156,7 +156,7 @@ public class AiRacketController : RacketController
     // Walks the ball's flight forward and returns the earliest point on the AI's side that the racket can reach
     // in time (after the remaining reaction time). If none is reachable, returns the landing point so the AI
     // still runs towards it. Returns false when the ball will hit the net, or will land out and is let go.
-    bool FindIntercept(GameManager gm, out Vector3 point, out float time)
+    protected bool FindIntercept(GameManager gm, out Vector3 point, out float time)
     {
         const float dt = 1f / 30f;
         Ball ball = gm.Ball;

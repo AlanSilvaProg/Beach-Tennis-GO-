@@ -34,6 +34,9 @@ public class MusicPlayer : MonoBehaviour
 
     void Start() { StartCoroutine(Load()); }
 
+    // The track was made by a download (about 23 MB decoded): free it when the scene goes, the next scene loads it again.
+    void OnDestroy() { if (source != null && source.clip != null) Destroy(source.clip); }
+
     IEnumerator Load()
     {
         string path = Application.streamingAssetsPath + "/" + File;

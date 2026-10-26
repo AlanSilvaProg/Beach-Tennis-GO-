@@ -6,6 +6,7 @@ using UnityEngine.UI;
 // The "MATCH REWARD" panel of the win screen: the Rally coin, the total counting up, and one row per bonus that was earned (each pops in after the
 // other). The panel is as tall as its rows need (Height); WinScreenLayout fits the whole screen around it, so any number of bonuses fits.
 // Everything is scene content (object "RewardPanel" under the win title); this script fills it and animates it.
+[DefaultExecutionOrder(100)] // after WinScreenLayout (it places the panel and the coin; the glow follows them)
 public class WinRewardPanel : MonoBehaviour
 {
     [Header("Parts")]
@@ -109,7 +110,6 @@ public class WinRewardPanel : MonoBehaviour
 
     void Update()
     {
-        if (glow != null && isActiveAndEnabled) glow.localRotation = Quaternion.Euler(0f, 0f, -Time.unscaledTime * glowSpeed);
         if (!running) return;
         float t = Time.unscaledTime - shownAt;
         if (amountText != null)
@@ -129,6 +129,14 @@ public class WinRewardPanel : MonoBehaviour
             rowValues[i].transform.localScale = Vector3.one * CountScale(local, rowCountTime);
         }
         if (coin != null) coin.localScale = Vector3.one * (1f + coinPulse * Mathf.Sin(Time.unscaledTime * 3.2f));
+    }
+
+    // After the layout of the screen has placed the panel and the coin: the glow is centred on the coin and turns.
+    void LateUpdate()
+    {
+        if (glow == null) return;
+        if (coin != null) glow.position = coin.position; // whatever the width of the panel (portrait / landscape)
+        glow.localRotation = Quaternion.Euler(0f, 0f, -Time.unscaledTime * glowSpeed);
     }
 
     // Size of a number `time` seconds after it started counting for `duration`: a steady pulse while it counts, a pop when it lands.

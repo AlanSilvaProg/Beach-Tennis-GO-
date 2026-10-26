@@ -34,6 +34,14 @@ public class Ball : MonoBehaviour
         if (trail != null) trail.Clear();
     }
 
+    // Sets where the ball is and how it moves without clearing its trail (the other player's match sends this about 20 times a second).
+    public void SetState(Vector3 pos, Vector3 vel)
+    {
+        Position = pos;
+        Velocity = vel;
+        Grounded = false;
+    }
+
     public void SetVisible(bool visible)
     {
         gameObject.SetActive(visible);

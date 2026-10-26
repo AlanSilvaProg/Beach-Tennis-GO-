@@ -8,5 +8,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scene/Gameplay.unity
     guid: dc06fa768e0e74e368561f31fe38d194
+  - enabled: 1
+    path: Assets/Scene/Online.unity
+    guid: 65d47481a0c7748769641a537ec5c376
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

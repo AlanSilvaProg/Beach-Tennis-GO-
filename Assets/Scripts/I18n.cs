@@ -73,7 +73,7 @@ public static class I18n
         return false;
     }
 
-    static string UrlParameter(string name)
+    public static string UrlParameter(string name)
     {
         string url = Application.absoluteURL;
         if (string.IsNullOrEmpty(url)) return null;
@@ -108,6 +108,17 @@ public static class I18n
         { "CPU point", "Ponto da CPU" },
         { "SETTINGS", "CONFIGURAÇÕES" },
         { "RACKETS", "RAQUETES" },
+        { "TOURNAMENT WIN", "TORNEIO VENCIDO" },
+        { "TOURNAMENT WINS {0}", "{0} TORNEIOS" },
+        { "ONLINE WIN", "VITÓRIA ONLINE" },
+        { "ONLINE WINS {0}", "{0} VITÓRIAS ONLINE" },
+        { "PLAY AGAIN", "JOGAR DE NOVO" },
+        { "Opponent point", "Ponto do adversário" },
+        { "SET TO OPPONENT", "SET DO ADVERSÁRIO" },
+        { "Searching for players", "Buscando jogadores" },
+        { "Player found!", "Jogador encontrado!" },
+        { "CANCEL", "CANCELAR" },
+        { "You  vs  {0}", "Você  vs  {0}" },
         { "FREE", "GRÁTIS" },
         { "MATCH REWARD", "RECOMPENSA" },
         { "RALLY COINS", "RALLY COINS" },
@@ -154,6 +165,17 @@ public static class I18n
         { "LOSE", "PERDIDO" },
         { "SETTINGS", "AJUSTES" },
         { "RACKETS", "RAQUETAS" },
+        { "TOURNAMENT WIN", "TORNEO GANADO" },
+        { "TOURNAMENT WINS {0}", "{0} TORNEOS" },
+        { "ONLINE WIN", "VICTORIA ONLINE" },
+        { "ONLINE WINS {0}", "{0} VICTORIAS ONLINE" },
+        { "PLAY AGAIN", "JUGAR DE NUEVO" },
+        { "Opponent point", "Punto del rival" },
+        { "SET TO OPPONENT", "SET DEL RIVAL" },
+        { "Searching for players", "Buscando jugadores" },
+        { "Player found!", "¡Jugador encontrado!" },
+        { "CANCEL", "CANCELAR" },
+        { "You  vs  {0}", "Tú  vs  {0}" },
         { "FREE", "GRATIS" },
         { "MATCH REWARD", "RECOMPENSA" },
         { "RALLY COINS", "RALLY COINS" },

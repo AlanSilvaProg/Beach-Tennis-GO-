@@ -124,6 +124,12 @@ public class ShotAnnouncer : MonoBehaviour
         return AudioType.WAV;
     }
 
+    // The clips were made by downloads, nothing else owns them: free them when the scene goes (the Online scene loads its own copy).
+    void OnDestroy()
+    {
+        foreach (var list in clips.Values) foreach (var c in list) if (c != null) Destroy(c);
+    }
+
     void Update()
     {
         if (voice != null && !voice.isPlaying && queue.Count > 0) Play(queue.Dequeue());

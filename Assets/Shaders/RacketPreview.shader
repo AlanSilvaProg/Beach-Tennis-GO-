@@ -4,7 +4,8 @@ Shader "BeachTennisGO/RacketPreview"
     Properties
     {
         _MainTex ("Texture", 2D) = "white" {}
-        _Ambient ("Ambient", Range(0, 1)) = 0.72
+        _Ambient ("Ambient", Range(0, 1)) = 0.85
+        _Brightness ("Brightness (the pictures are meant to stand out)", Range(0.5, 2)) = 1.3
         _LightDir ("Light direction (view space)", Vector) = (-0.4, 0.6, 0.7, 0)
     }
     SubShader
@@ -21,7 +22,7 @@ Shader "BeachTennisGO/RacketPreview"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
-            float _Ambient;
+            float _Ambient, _Brightness;
             float4 _LightDir;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float3 n : TEXCOORD1; };
@@ -40,7 +41,7 @@ Shader "BeachTennisGO/RacketPreview"
                 float3 n = normalize(i.n) * (facing > 0 ? 1 : -1);
                 float l = saturate(dot(n, normalize(_LightDir.xyz)));
                 fixed4 c = tex2D(_MainTex, i.uv);
-                c.rgb *= _Ambient + (1 - _Ambient) * l * 1.6;
+                c.rgb = saturate(c.rgb * (_Ambient + (1 - _Ambient) * l * 1.6) * _Brightness);
                 c.a = 1;
                 return c;
             }

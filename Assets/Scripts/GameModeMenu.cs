@@ -27,6 +27,12 @@ public class GameModeMenu : MonoBehaviour
     [Tooltip("Picture of the Training button in each language (English, Portuguese, Spanish).")]
     public Sprite[] trainingSprites = new Sprite[3];
     public Button tournamentButton;
+    [Tooltip("The Tournament mode is not made yet: while this is on its button is locked (a padlock over it, dark, and it does nothing). Switch it off when the mode exists.")]
+    public bool tournamentLocked = true;
+    [Tooltip("The padlock drawn over the locked Tournament button.")]
+    public GameObject tournamentLock;
+    [Tooltip("How dark the locked button is (1 = not at all).")]
+    [Range(0.1f, 1f)] public float lockedBrightness = 0.38f;
     [Tooltip("Picture of the Tournament button in each language (English, Portuguese, Spanish).")]
     public Sprite[] tournamentSprites = new Sprite[3];
     public Button onlineButton;
@@ -162,12 +168,16 @@ public class GameModeMenu : MonoBehaviour
         if (!visible && (WindowOpen || currentX != ClosedX)) { WindowOpen = false; currentX = ClosedX; velocity = 0f; ApplyX(); }
     }
 
+    // The mode in use (the game sets Online once an opponent was found).
+    public void SetMode(GameMode mode) { Mode = mode; Refresh(); }
+
     public bool IsVisible => root != null && root.activeSelf;
 
     void Select(GameMode mode)
     {
         ModeSelected?.Invoke(mode);
-        PokiEvents.Track("mode", "select", "mode", mode.ToString(), "available", mode == GameMode.Training);
+        PokiEvents.Track("mode", "select", "mode", mode.ToString(), "available", mode != GameMode.Tournament);
+        if (mode == GameMode.Online) { WindowOpen = false; return; } // the game opens the search for a player; the mode is set when one is found
         if (mode != GameMode.Training) return; // not implemented yet
         Mode = mode;
         Refresh();
@@ -180,9 +190,11 @@ public class GameModeMenu : MonoBehaviour
         if (modeLabel != null) modeLabel.text = ModeName(Mode);
         Highlight(trainingButton, Mode == GameMode.Training);
         Highlight(tournamentButton, Mode == GameMode.Tournament);
+        if (tournamentLocked && tournamentButton != null && tournamentButton.image != null) tournamentButton.image.color = new Color(lockedBrightness, lockedBrightness, lockedBrightness, 1f);
         Highlight(onlineButton, Mode == GameMode.Online);
         if (trainingButton != null) trainingButton.interactable = Mode != GameMode.Training;
-        if (tournamentButton != null) tournamentButton.interactable = Mode != GameMode.Tournament;
+        if (tournamentButton != null) tournamentButton.interactable = Mode != GameMode.Tournament && !tournamentLocked;
+        if (tournamentLock != null) tournamentLock.SetActive(tournamentLocked);
         if (onlineButton != null) onlineButton.interactable = Mode != GameMode.Online;
     }
 

@@ -4,7 +4,8 @@ using UnityEngine;
 // Point rules: the hitter scores only when the ball lands inside the opponent's half; out, net or own-side landings lose the point.
 public class GameManager : MonoBehaviour
 {
-    enum State { Menu, Serving, Rally, PointOver, MatchOver }
+    public enum State { Menu, Serving, Rally, PointOver, MatchOver }
+    public enum NetRole { None, Host, Guest }
 
     [Header("Scene references")]
     public Court court;
@@ -25,6 +26,9 @@ public class GameManager : MonoBehaviour
     public SettingsWindow settings;
     [Tooltip("Rackets window (and its button): the skin on the player's racket and the new racket screen.")]
     public RacketSelection rackets;
+    [Header("Online (only in the Online scene)")]
+    [Tooltip("This is the Online scene: no levels, no mode menu; OnlineMatch finds the opponent (a real player or the fake one) and starts the match.")]
+    public bool onlineScene;
     [Tooltip("Seconds the scoreboard hangs down when a match starts, before it is pulled up to show only the clock.")]
     public float scoreboardRevealTime = 1.6f;
     [Header("Rally coin reward (win screen)")]
@@ -107,12 +111,18 @@ public class GameManager : MonoBehaviour
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
     int infoLevel = -1;
+    string shownNpcName = "", shownMyName = "";
     bool loseLabelsSet, winLabelsSet, namesSet, backLabelsSet;
     string startReason = "menu"; // why the next match starts (for the Poki events): menu, next_level, restart, retry
     int highestLevelSeen;
     float retryNoticeUntil; // "Retry!" confirmation after a rewarded ad
     string info = "";
     float scoreboardRevealUntil; // the board stays down until then (it drops when a match starts)
+    RacketController opponent;     // who plays the far side right now (see Opponent)
+    string opponentName = "CPU";
+    string localName = "";
+    int netSerial;                 // grows with every change of state (sent to the guest)
+    int bannerKind;                // what the banner says, as a number for the guest (see NetSnapshot)
     MatchStats stats; // what happened in the match so far (for the reward)
     int hitsInPoint; // racket hits since the serve (1 = only the serve has been hit)
     float rallyTime;
@@ -123,6 +133,11 @@ public class GameManager : MonoBehaviour
     public Ball Ball => ball;
     public Net Net => net;
     public AiRacketController Ai => ai;
+    // Whoever plays the far side: the training CPU, the fake online opponent (both `ai`) or, online, the other player (a RemoteRacketController).
+    public RacketController Opponent => opponent;
+    public NetRole Role { get; private set; }
+    public bool PlayerServingFor(int side) { return state == State.Serving && server == (side < 0 ? 0 : 1); } // (the far side is side +1)
+    public State CurrentState => state;
     public Court Court => court;
     // Simulated ball seconds per real second (the ball arcs are the same, it just gets there sooner).
     public float BallSpeed => ballSpeed;
@@ -134,12 +149,17 @@ public class GameManager : MonoBehaviour
     // A match is on: serving, rallying or pausing between points (not the menu or the result screens).
     public bool MatchOn => state == State.Serving || state == State.Rally || state == State.PointOver;
     public bool AiServing => state == State.Serving && server == 1;
+    // The AI may swing at its serve (a short moment after the ball is set up).
+    public bool AiServeReady => AiServing && stateTimer > serveDelay;
+    public bool Online => onlineScene;
 
     void Awake()
     {
         Application.targetFrameRate = targetFrameRate;
         if (poki == null) poki = FindFirstObjectByType<PokiService>();
         if (menu == null) menu = FindFirstObjectByType<GameModeMenu>();
+        opponent = ai;
+        if (menu != null) { menu.ModeSelected -= OnModeSelected; menu.ModeSelected += OnModeSelected; }
         if (hud != null)
         {
             hud.RestartClicked -= OnRestartClicked; hud.RestartClicked += OnRestartClicked; // -= first: never subscribe twice
@@ -147,41 +167,49 @@ public class GameManager : MonoBehaviour
             hud.ContinueClicked -= OnContinueClicked; hud.ContinueClicked += OnContinueClicked;
             hud.BackClicked -= OnBackClicked; hud.BackClicked += OnBackClicked;
         }
+        // ?mode=online in the address opens the online mode at once (to try it with two browser tabs); only the first time, so BACK still comes here
+        if (!onlineScene && !urlModeHandled)
+        {
+            urlModeHandled = true;
+            if (I18n.UrlParameter("mode") == "online") { SceneFlow.OpenOnline(); return; }
+        }
         ChannelMute.Attach(sfx, AudioChannel.Sfx);
-        PokiEvents.Track("game", "loaded", "language", I18n.Code);
+        if (!loadedReported) { loadedReported = true; PokiEvents.Track("game", "loaded", "language", I18n.Code); } // once, not at every scene
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
         player.ResetPosition();
-        ai.ResetPosition();
+        opponent.ResetPosition();
         ball.SetVisible(false);
     }
 
     void Update()
     {
+        if (Role == NetRole.Guest) { GuestUpdate(); return; }
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
         // The racket does not follow the pointer when no match is on (menu, win screen, lose screen) nor while an ad plays: a touch there is for
         // the buttons, not for moving the racket.
         bool inputLocked = state == State.Menu || state == State.MatchOver;
         if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
-        ai.Tick(this);
+        opponent.Tick(this);
 
         switch (state)
         {
             case State.Menu:
                 hud.Banner = ""; // no text: the TapHint hand shows what to do
                 // A tap on the menu's own buttons is not a "play" tap; with the mode window open, a tap elsewhere only closes it.
-                if (Pressed() && !PointerOverUi())
+                if (!onlineScene && Pressed() && !PointerOverUi())
                 {
                     if (menu != null && menu.WindowOpen) menu.CloseWindow();
-                    else if (menu == null || menu.Mode == GameMode.Training) BeginMatch(); // Training is the only mode so far
+                    else if (menu == null || menu.Mode == GameMode.Training) BeginMatch();
                 }
                 break;
             case State.Serving:
                 hud.Banner = Time.time < retryNoticeUntil ? I18n.Tr("Retry!") : ""; // no text about who serves or how: the ServeHint ghost teaches it
-                if (server == 0) TryPlayerServe();
+                if (server == 0) TryHumanServe(player.Racket, 0, player);
+                else if (Role == NetRole.Host) TryHumanServe(opponent.Racket, 1, opponent); // the other player serves with their own racket
                 else if (stateTimer > serveDelay) TryAiServe();
                 break;
             case State.Rally:
@@ -219,7 +247,7 @@ public class GameManager : MonoBehaviour
         if (poki != null) poki.GameplayStop();
         ball.SetVisible(false);
         player.ResetPosition();
-        ai.ResetPosition();
+        opponent.ResetPosition();
         cameraRig.SetServing(true);
         EnterState(State.Menu);
     }
@@ -232,7 +260,9 @@ public class GameManager : MonoBehaviour
 
     void UpdateHud()
     {
-        if (!namesSet) { hud.SetNames(I18n.Tr("PLAYER"), "CPU"); namesSet = true; }
+        string npcName = Online ? opponentName : "CPU";
+        string myName = Online && localName.Length > 0 ? localName : I18n.Tr("PLAYER");
+        if (!namesSet || npcName != shownNpcName || myName != shownMyName) { hud.SetNames(myName, npcName); shownNpcName = npcName; shownMyName = myName; namesSet = true; }
         // The board hangs out of sight in the menu, drops when a match starts (and for every point and result), and in between stays pulled up
         // with only the clock showing.
         bool revealing = state == State.PointOver || state == State.MatchOver || Time.unscaledTime < scoreboardRevealUntil;
@@ -240,7 +270,7 @@ public class GameManager : MonoBehaviour
         bool wonMatch = state == State.MatchOver && playerScore > aiScore;
         if (menu != null) menu.SetVisible(state == State.Menu, true); // the Game mode button is for the menu only (not on the result screens)
         if (state == State.MatchOver && !backLabelsSet) { hud.SetBackLabels(I18n.Tr("BACK")); backLabelsSet = true; }
-        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), WonText(), I18n.Tr("CONTINUE")); winLabelsSet = true; }
+        if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), WonText(), Online ? I18n.Tr("PLAY AGAIN") : I18n.Tr("CONTINUE")); winLabelsSet = true; }
         hud.SetWinTitle(wonMatch);
         hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         bool lostMatch = state == State.MatchOver && aiScore > playerScore;
@@ -249,22 +279,35 @@ public class GameManager : MonoBehaviour
         if (lostMatch && !loseLabelsSet)
         {
             hud.SetLoseTitleLabels(I18n.Tr("YOU"), I18n.Tr("LOSE"));
-            hud.SetLoseLabels(I18n.Tr("RESTART"), I18n.Tr("RETRY"));
+            hud.SetLoseLabels(Online ? I18n.Tr("PLAY AGAIN") : I18n.Tr("RESTART"), I18n.Tr("RETRY"));
             loseLabelsSet = true;
         }
         hud.SetScore(playerScore, aiScore);
         hud.SetTime(matchTime);
-        int infoKey = level * 1000 + playerSets * 100 + aiSets * 10 + setsToWin;
+        int infoKey = level * 1000 + playerSets * 100 + aiSets * 10 + setsToWin + (Online ? 100000 + opponentName.GetHashCode() % 50000 : 0);
         if (infoKey != infoLevel)
         {
             infoLevel = infoKey;
-            info = I18n.Tr("You  vs  CPU   |   Level {0}", level);
+            info = Online ? I18n.Tr("You  vs  {0}", opponentName) : I18n.Tr("You  vs  CPU   |   Level {0}", level);
             if (setsToWin > 1) info += "   |   " + I18n.Tr("Sets {0} - {1}", playerSets, aiSets);
         }
         hud.Info = info;
-        if (settings != null) settings.SetButtonVisible(state == State.Menu || state == State.MatchOver);
-        if (rackets != null) rackets.SetButtonVisible((state == State.Menu || (state == State.MatchOver && !wonMatch)) && (settings == null || !settings.IsOpen));
+        if (settings != null) settings.SetButtonVisible(!onlineScene && (state == State.Menu || state == State.MatchOver));
+        if (rackets != null) rackets.SetButtonVisible((state == State.Menu || (state == State.MatchOver && !wonMatch)) && (settings == null || !settings.IsOpen) && !onlineScene);
     }
+
+    // ---------- online ----------
+
+    // The ONLINE VS button of the mode window: the Online scene has its own match flow (and its own objects), so it is a scene of its own.
+    void OnModeSelected(GameMode mode)
+    {
+        if (mode != GameMode.Online || state != State.Menu || onlineScene) return;
+        PokiEvents.Track("online", "enter");
+        SceneFlow.OpenOnline();
+    }
+
+    // What the player chose on the result screens of the Online scene: true = look for another opponent, false = back to the menu.
+    public event System.Action<bool> OnlineResult;
 
     static string WonText()
     {
@@ -286,6 +329,7 @@ public class GameManager : MonoBehaviour
     void OnContinueClicked()
     {
         if (!CanUseContinue) return;
+        if (Online) { OnlineResult?.Invoke(true); return; } // there are no levels online: CONTINUE looks for the next opponent
         PokiEvents.Track("match", "continue", "level", level, "next_level", level + 1);
         startReason = "next_level";
         level++;
@@ -297,6 +341,7 @@ public class GameManager : MonoBehaviour
     {
         if (state != State.MatchOver || stateTimer <= matchOverInputDelay || PokiService.AdPlaying) return;
         PokiEvents.Track("match", "back", "from", playerScore > aiScore ? "win" : "lose", "level", level);
+        if (Online) { OnlineResult?.Invoke(false); return; }
         ReturnToMenu();
     }
 
@@ -306,6 +351,7 @@ public class GameManager : MonoBehaviour
     void OnRestartClicked()
     {
         if (!CanUseLoseButtons) return;
+        if (Online) { OnlineResult?.Invoke(true); return; } // online, RESTART looks for another opponent
         PokiEvents.Track("match", "restart", "level", level);
         startReason = "restart";
         level = startLevel;
@@ -315,7 +361,7 @@ public class GameManager : MonoBehaviour
     // RETRY (rewarded ad): plays the same level again, but only when the player really watched the ad. No ad / ad blocker = nothing happens.
     void OnRetryClicked()
     {
-        if (!CanUseLoseButtons) return;
+        if (!CanUseLoseButtons || Online) return; // (no rewarded rematch online)
         startReason = "retry";
         if (poki == null) { PokiEvents.Track("match", "retry", "level", level, "granted", true); retryNoticeUntil = Time.time + 2f; StartMatch(); return; }
         poki.RewardedBreak(granted =>
@@ -332,20 +378,21 @@ public class GameManager : MonoBehaviour
         pointsToWin = GameSettings.PointsToWin;
         setsToWin = GameSettings.SetsToWin;
         PokiEvents.Track("match", "start", "level", level, "points_to_win", pointsToWin, "sets_to_win", setsToWin, "reason", startReason);
-        RacketProgress.ReportTrainingLevel(level); // Training is the only mode so far; rackets that unlock by level
-        if (level > highestLevelSeen) { highestLevelSeen = level; PokiEvents.Track("level", "reached", "level", level); }
+        if (!Online) RacketProgress.ReportTrainingLevel(level); // rackets that unlock by Training level
+        if (!Online && level > highestLevelSeen) { highestLevelSeen = level; PokiEvents.Track("level", "reached", "level", level); }
         playerScore = aiScore = 0;
         playerSets = aiSets = 0;
         newSetPending = false;
         matchTime = 0f;
         scoreboardRevealUntil = Time.unscaledTime + scoreboardRevealTime;
-        stats = new MatchStats { level = level };
+        stats = new MatchStats { level = Online ? 1 : level };
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         if (poki != null) poki.GameplayStart(); // the player's first input of the match
         server = 0;
-        ai.SetLevel(level);
+        bannerKind = 0;
+        if (opponent == ai) ai.SetLevel(level);
         player.ResetPosition();
-        ai.ResetPosition();
+        opponent.ResetPosition();
         PrepareServe();
     }
 
@@ -367,6 +414,7 @@ public class GameManager : MonoBehaviour
     {
         state = s;
         stateTimer = 0f;
+        netSerial++;
     }
 
     // ---------- ball ----------
@@ -376,7 +424,8 @@ public class GameManager : MonoBehaviour
         float z = (server == 0 ? -1f : 1f) * (court.halfLength - serveBaselineOffset);
         serveArmed = false;
         servePrevDz = float.NaN;
-        ball.Place(new Vector3(server == 0 ? player.Racket.Position.x : Random.Range(-serveBallSpread, serveBallSpread),
+        float serveX = server == 0 ? player.Racket.Position.x : Role == NetRole.Host ? opponent.Racket.Position.x : Random.Range(-serveBallSpread, serveBallSpread);
+        ball.Place(new Vector3(serveX,
                                serveBallHeight, z), Vector3.zero);
         ball.SetVisible(true);
         lastHitter = server;
@@ -431,9 +480,8 @@ public class GameManager : MonoBehaviour
 
     // The ball follows the racket sideways. It only accepts a hit after the racket has been pulled back behind it,
     // and then only when the racket swings forward into it.
-    void TryPlayerServe()
+    void TryHumanServe(Racket r, int side, RacketController who)
     {
-        Racket r = player.Racket;
         float maxX = court.halfWidth - serveSideMargin;
         ball.Position = new Vector3(Mathf.Clamp(r.Position.x, -maxX, maxX), ball.Position.y, ball.Position.z);
         ball.Sync(court.groundY);
@@ -448,7 +496,7 @@ public class GameManager : MonoBehaviour
         bool contact = Mathf.Abs(dz) <= serveContactRadius || crossed || (wasIn && Mathf.Abs(dz) > Mathf.Abs(servePrevDz));
         if (serveArmed && (inReach || crossed) && contact && r.SwingForwardSpeed >= serveMinHitSpeed)
         {
-            Hit(0, player);
+            Hit(side, who);
             return;
         }
         servePrevDz = inReach ? dz : float.NaN;
@@ -456,7 +504,7 @@ public class GameManager : MonoBehaviour
 
     void TryAiServe()
     {
-        if (InReach(ai.Racket)) Hit(1, ai);
+        if (InReach(opponent.Racket)) Hit(1, opponent);
     }
 
     void Simulate(bool rules)
@@ -483,7 +531,7 @@ public class GameManager : MonoBehaviour
 
         // Rackets hit the ball when it is within reach and flying towards them.
         if (lastHitter != 0 && ball.Velocity.z < 0f) CheckRacket(0, player);
-        if (state == State.Rally && lastHitter != 1 && ball.Velocity.z > 0f) CheckRacket(1, ai);
+        if (state == State.Rally && lastHitter != 1 && ball.Velocity.z > 0f) CheckRacket(1, opponent);
 
         if (state == State.Rally && (rallyTime > rallyTimeout || ball.Position.magnitude > ball.maxDistance))
             Score(1 - lastHitter);
@@ -504,14 +552,15 @@ public class GameManager : MonoBehaviour
         rallyTime = 0f; // the timeout counts from the last hit, not from the serve (a long rally is not a stuck ball)
         PlayHit(side, ball.Velocity.magnitude);
         if (announcer != null && state != State.Serving)
-            announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? ai.Racket : player.Racket, side, contact, incoming, ball.Velocity);
+            announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? opponent.Racket : player.Racket, side, contact, incoming, ball.Velocity);
         if (state == State.Serving)
         {
             accumulator = 0f;
             cameraRig.SetServing(false);
             EnterState(State.Rally);
         }
-        if (side == 0) ai.OnOpponentHit(this);
+        if (side == 0) opponent.OnOpponentHit(this);
+        NetMessage?.Invoke(NetProtocol.EventHit(side, ball.Velocity.magnitude)); // the other player hears it too
     }
 
     void Play(AudioClip clip, float volume, float pitch)
@@ -563,8 +612,11 @@ public class GameManager : MonoBehaviour
         if (winner == 0) { playerScore++; stats.playerPoints++; } else { aiScore++; stats.cpuPoints++; }
         stats.longestRally = Mathf.Max(stats.longestRally, hitsInPoint);
         stats.maxDeficit = Mathf.Max(stats.maxDeficit, aiScore - playerScore);
-        hud.Banner = winner == 0 ? I18n.Tr("Point!") : I18n.Tr("CPU point");
-        Bleachers.Cheer(winner == 0 ? 0.9f : 0.4f); // the crowd reacts to every point (more to the player's)
+        bannerKind = winner == 0 ? 1 : 2;
+        hud.Banner = BannerText(bannerKind);
+        float cheer = winner == 0 ? 0.9f : 0.4f;
+        Bleachers.Cheer(cheer); // the crowd reacts to every point (more to the player's)
+        NetMessage?.Invoke(NetProtocol.EventCheer(cheer));
         bool setOver = IsMatchOver(playerScore, aiScore);
         if (setOver)
         {
@@ -578,20 +630,42 @@ public class GameManager : MonoBehaviour
                 PokiEvents.Track("match", "end", "result", matchWon ? "win" : "lose", "level", level, "duration_s", Mathf.RoundToInt(matchTime),
                                  "player_sets", playerSets, "cpu_sets", aiSets, "player_points", playerScore, "cpu_points", aiScore);
                 PokiEvents.Track("level", matchWon ? "complete" : "failed", "level", level);
-                if (matchWon) RacketProgress.ReportTrainingLevel(level + 1); // the next level is reached: rackets may unlock (the new racket screen follows)
-                if (matchWon) GiveReward();
-                hud.Banner = ""; // the win and lose screens show their own big centred titles (UpdateHud)
+                if (matchWon && !Online) RacketProgress.ReportTrainingLevel(level + 1); // the next level is reached: rackets may unlock (the new racket screen follows)
+                bannerKind = 0;
                 EnterState(State.MatchOver);
-                if (playerScore > aiScore && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
-                if (poki != null) poki.GameplayStop();
-                Bleachers.Cheer(matchWon ? 1f : 0.3f);
-                PlayCrowd();
+                AfterMatchOver(matchWon, true);
                 return;
             }
-            hud.Banner = playerScore > aiScore ? I18n.Tr("SET TO YOU") : I18n.Tr("SET TO CPU"); // the match goes on: a new set starts after the pause
+            bannerKind = playerScore > aiScore ? 3 : 4;
+            hud.Banner = BannerText(bannerKind); // the match goes on: a new set starts after the pause
             newSetPending = true;
         }
         EnterState(State.PointOver);
+    }
+
+    // The banner of a point or a set, from its number (see NetSnapshot).
+    string BannerText(int kind)
+    {
+        switch (kind)
+        {
+            case 1: return I18n.Tr("Point!");
+            case 2: return Online ? I18n.Tr("Opponent point") : I18n.Tr("CPU point");
+            case 3: return I18n.Tr("SET TO YOU");
+            case 4: return Online ? I18n.Tr("SET TO OPPONENT") : I18n.Tr("SET TO CPU");
+            default: return "";
+        }
+    }
+
+    // What happens when a match ends: the reward of a win, the confetti behind the win title, the end of the Poki gameplay, the crowd.
+    void AfterMatchOver(bool matchWon, bool reward)
+    {
+        if (matchWon && reward) GiveReward();
+        if (matchWon && reward && Online) RacketProgress.ReportOnlineWin(); // (a win because the other player left does not count)
+        hud.Banner = ""; // the win and lose screens show their own big centred titles (UpdateHud)
+        if (matchWon && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
+        if (poki != null) poki.GameplayStop();
+        Bleachers.Cheer(matchWon ? 1f : 0.3f);
+        PlayCrowd();
     }
 
     void NextPoint()
@@ -602,8 +676,158 @@ public class GameManager : MonoBehaviour
         server = ((endgame ? total % 2 : (total / servesPerTurn) % 2) + playerSets + aiSets) % 2; // each new set starts with the other side serving
         ball.SetVisible(false);
         player.ResetPosition();
-        ai.ResetPosition();
+        opponent.ResetPosition();
         PrepareServe();
+    }
+
+    // ---------- online: the two players ----------
+    // The HOST (the player who made the lobby) simulates everything exactly as in a training match, with the other player's racket where the CPU's
+    // would be. The GUEST runs no rules at all: it draws what the host says (GuestApply) and moves its own racket. OnlineMatch sends the messages.
+
+    // Messages for the guest (hits and crowd cheers); the state itself is sent by OnlineMatch from ExportSnapshot.
+    public event System.Action<string> NetMessage;
+
+    bool peerGone;
+    static bool loadedReported, urlModeHandled;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { loadedReported = false; urlModeHandled = false; } // static state survives a Play without domain reload
+
+    // Online match with `other` as the far-side racket (a RemoteRacketController for a real player, `ai` for the fake opponent).
+    public void BeginOnline(NetRole role, RacketController other, string myName, string theirName)
+    {
+        Role = role;
+        opponent = other;
+        localName = myName; opponentName = theirName;
+        namesSet = false;
+        peerGone = false;
+    }
+
+    // Host or fake: the match starts now (with the host's settings).
+    public void StartOnlineMatch()
+    {
+        startReason = "online";
+        StartMatch();
+    }
+
+    // Guest: the rules come from the host; the first state arrives with the first snapshot.
+    public void StartGuestMatch(int points, int sets)
+    {
+        pointsToWin = points; setsToWin = sets;
+        playerScore = aiScore = 0; playerSets = aiSets = 0;
+        matchTime = 0f; peerGone = false;
+        stats = new MatchStats { level = 1 };
+        scoreboardRevealUntil = Time.unscaledTime + scoreboardRevealTime;
+        if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        if (poki != null) poki.GameplayStart();
+        player.ResetPosition();
+        opponent.ResetPosition();
+        ball.SetVisible(false);
+        PokiEvents.Track("match", "start", "level", 1, "points_to_win", points, "sets_to_win", sets, "reason", "online_guest");
+    }
+
+    public NetSnapshot ExportSnapshot()
+    {
+        return new NetSnapshot
+        {
+            serial = netSerial, state = (int)state, server = server,
+            scoreA = playerScore, scoreB = aiScore, setsA = playerSets, setsB = aiSets,
+            banner = bannerKind, time = matchTime, ballVisible = ball.gameObject.activeSelf,
+            ballPos = ball.Position, ballVel = ball.Velocity,
+            racketA = new Vector2(player.Racket.Position.x, player.Racket.Position.z),
+            racketB = new Vector2(opponent.Racket.Position.x, opponent.Racket.Position.z),
+        };
+    }
+
+    // Guest: the state of the match as the host sent it, already turned round (NetProtocol.ForGuest). `latency` is the one-way delay in seconds.
+    public void GuestApply(NetSnapshot v, float latency)
+    {
+        if (peerGone || Role != NetRole.Guest) return;
+        bool changed = v.serial != netSerial || v.state != (int)state;
+        playerScore = v.scoreA; aiScore = v.scoreB; playerSets = v.setsA; aiSets = v.setsB;
+        server = v.server;
+        if (Mathf.Abs(matchTime - v.time) > 0.5f) matchTime = v.time;
+        if (changed) { GuestEnter((State)v.state, v); netSerial = v.serial; }
+        if (opponent is RemoteRacketController remote) remote.SetTarget(v.racketB);
+
+        if (v.ballVisible)
+        {
+            if (!ball.gameObject.activeSelf) ball.SetVisible(true);
+            ball.SetState(v.ballPos, v.state == (int)State.Serving ? Vector3.zero : v.ballVel);
+            if (v.state != (int)State.Serving) AdvanceBall(latency); // it has travelled on while the message was on its way
+            ball.Sync(court.groundY);
+        }
+        else if (ball.gameObject.activeSelf) ball.SetVisible(false);
+    }
+
+    void AdvanceBall(float seconds)
+    {
+        int steps = Mathf.Clamp(Mathf.RoundToInt(seconds / physicsStep), 0, 120);
+        for (int i = 0; i < steps; i++) ball.Step(physicsStep * ballSpeed, court, net, out Vector3 prev);
+    }
+
+    // A change of state on the host: what the guest does about it.
+    void GuestEnter(State st, NetSnapshot v)
+    {
+        EnterState(st);
+        switch (st)
+        {
+            case State.Serving:
+                ball.SetVisible(true);
+                lastHitter = server;
+                cameraRig.SetServing(true);
+                hitsInPoint = 0;
+                player.ResetPosition();
+                opponent.ResetPosition();
+                hud.Banner = "";
+                break;
+            case State.Rally:
+                cameraRig.SetServing(false);
+                hud.Banner = "";
+                break;
+            case State.PointOver:
+                bannerKind = v.banner;
+                hud.Banner = BannerText(v.banner);
+                break;
+            case State.MatchOver:
+                bannerKind = 0;
+                AfterMatchOver(v.scoreA > v.scoreB, true);
+                break;
+        }
+    }
+
+    // The frame of a guest: its own racket, the other racket (moved by GuestApply's target) and the ball flying on its own between two states.
+    void GuestUpdate()
+    {
+        float dt = Time.deltaTime;
+        stateTimer += dt;
+        if (state != State.Menu && state != State.MatchOver) matchTime += dt;
+        bool inputLocked = state == State.Menu || state == State.MatchOver;
+        if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
+        opponent.Tick(this);
+        if (state == State.Rally || state == State.PointOver) Simulate(false); else ball.Sync(court.groundY);
+        UpdateHud();
+    }
+
+    // Guest: a hit or a cheer that the host reports (side 0 is the host, so 1 - side for this player).
+    public void GuestEvent(string[] f)
+    {
+        if (!NetProtocol.ParseEvent(f, out char kind, out float a, out float b)) return;
+        if (kind == 'H') PlayHit(1 - (int)a, b);
+        else if (kind == 'C') Bleachers.Cheer(a);
+    }
+
+    // The other player left (or stopped answering) before the match was over: the match is won, without a reward.
+    public void OpponentLeft()
+    {
+        if (peerGone || state == State.MatchOver || state == State.Menu) return;
+        peerGone = true;
+        PokiEvents.Track("online", "opponent_left", "state", state.ToString());
+        playerScore = Mathf.Max(playerScore, aiScore + 1);
+        playerSets = Mathf.Max(playerSets, setsToWin);
+        bannerKind = 0;
+        EnterState(State.MatchOver);
+        AfterMatchOver(true, false);
     }
 
 #if UNITY_EDITOR

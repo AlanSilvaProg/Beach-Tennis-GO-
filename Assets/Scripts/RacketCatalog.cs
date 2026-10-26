@@ -3,6 +3,7 @@ using UnityEngine;
 
 // How a racket gets unlocked. To add a new rule: add a value here, handle it in RacketProgress.RuleMet (if it can be checked from the saved
 // progress) or call RacketProgress.Unlock(id) from wherever the rule is decided (a purchase, an achievement...).
+// The order of the values is saved in RacketCatalog.asset: new kinds go at the end.
 public enum UnlockKind
 {
     [Tooltip("Owned from the start.")] Always,
@@ -10,13 +11,15 @@ public enum UnlockKind
     [Tooltip("Unlocked when the player reaches this level of the Training mode.")] TrainingLevel,
     [Tooltip("Bought with Rally coins: tap the locked racket in the window and pay Value coins.")] RallyCoins,
     [Tooltip("Free for watching a rewarded ad: tap the locked racket in the window.")] RewardedAd,
+    [Tooltip("Unlocked after winning Value matches in the Online mode (against a real player or the fake one; a win because the other left does not count).")] OnlineWins,
+    [Tooltip("Unlocked after winning Value tournaments (the Tournament mode is not made yet: when it is, call RacketProgress.ReportTournamentWin() when the player wins one).")] TournamentWins,
 }
 
 [Serializable]
 public class UnlockRule
 {
     public UnlockKind kind = UnlockKind.Always;
-    [Tooltip("TrainingLevel: the level to reach. RallyCoins: the price in coins.")]
+    [Tooltip("TrainingLevel: the level to reach. RallyCoins: the price in coins. OnlineWins: how many online matches to win. TournamentWins: how many tournaments to win.")]
     public int value = 2;
     [Tooltip("Very short text shown on the locked racket (e.g. \"LV 5\", \"VIP\", \"$1\"). Empty = made from the rule (\"LV <value>\" for TrainingLevel).")]
     public string requirementText = "";
@@ -59,6 +62,8 @@ public class RacketSkin
             if (!string.IsNullOrEmpty(unlock.requirementText)) return unlock.requirementText;
             if (unlock.kind == UnlockKind.TrainingLevel) return I18n.Tr("LV {0}", unlock.value);
             if (unlock.kind == UnlockKind.RewardedAd) return I18n.Tr("FREE");
+            if (unlock.kind == UnlockKind.TournamentWins) return unlock.value <= 1 ? I18n.Tr("TOURNAMENT WIN") : I18n.Tr("TOURNAMENT WINS {0}", unlock.value);
+            if (unlock.kind == UnlockKind.OnlineWins) return unlock.value <= 1 ? I18n.Tr("ONLINE WIN") : I18n.Tr("ONLINE WINS {0}", unlock.value);
             return unlock.kind == UnlockKind.RallyCoins ? unlock.value.ToString() : "";
         }
     }

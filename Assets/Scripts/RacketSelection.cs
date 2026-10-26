@@ -306,12 +306,25 @@ public class RacketSelection : MonoBehaviour
     public void ApplyEquipped()
     {
         var skin = RacketProgress.Equipped;
-        if (skin == null || skin.texture == null || racket == null || racket.model == null) return;
+        if (skin == null || racket == null) return;
+        ApplySkin(racket, skin);
+    }
+
+    // The skin (by id) on another racket, e.g. the other player's in an online match. An unknown or empty id leaves the racket as it is.
+    public void ApplySkinTo(Racket target, string id)
+    {
+        var skin = catalog != null ? catalog.Find(id) : null;
+        if (skin != null && target != null) ApplySkin(target, skin);
+    }
+
+    void ApplySkin(Racket target, RacketSkin skin)
+    {
+        if (skin.texture == null || target.model == null) return;
         if (block == null) block = new MaterialPropertyBlock();
         block.Clear();
         block.SetTexture("_MainTex", skin.texture);
         block.SetTexture("_EmissionMap", skin.texture); // the racket material also glows with its own texture
-        foreach (var r in racket.model.GetComponentsInChildren<Renderer>(true)) r.SetPropertyBlock(block);
+        foreach (var r in target.model.GetComponentsInChildren<Renderer>(true)) r.SetPropertyBlock(block);
     }
 
     // ---- new racket screen ----

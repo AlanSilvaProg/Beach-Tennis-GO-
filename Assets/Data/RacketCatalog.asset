@@ -44,3 +44,73 @@ MonoBehaviour:
       kind: 3
       value: 300
       requirementText: 
+  - id: happy
+    nameEn: Happy
+    namePt: Feliz
+    nameEs: Feliz
+    texture: {fileID: 2800000, guid: cf73c8619b9dd43e3a93c106d79c955b, type: 3}
+    color: {r: 1, g: 0.82, b: 0.12, a: 1}
+    unlock:
+      kind: 4
+      value: 2
+      requirementText: 
+  - id: iron
+    nameEn: Iron
+    namePt: Ferro
+    nameEs: Hierro
+    texture: {fileID: 2800000, guid: 789ed5d24ed04498aafdbc75e866800e, type: 3}
+    color: {r: 0.58, g: 0.66, b: 0.78, a: 1}
+    unlock:
+      kind: 3
+      value: 500
+      requirementText: 
+  - id: bronze
+    nameEn: Bronze
+    namePt: Bronze
+    nameEs: Bronce
+    texture: {fileID: 2800000, guid: 372814342dc2d4befa9d629d746aa5be, type: 3}
+    color: {r: 0.82, g: 0.5, b: 0.22, a: 1}
+    unlock:
+      kind: 5
+      value: 1
+      requirementText: 
+  - id: dino
+    nameEn: Dino
+    namePt: Dino
+    nameEs: Dino
+    texture: {fileID: 2800000, guid: 84eb70ec93153475c9edef8158c2cfaf, type: 3}
+    color: {r: 0.36, g: 0.64, b: 0.26, a: 1}
+    unlock:
+      kind: 3
+      value: 400
+      requirementText: 
+  - id: vulcanic
+    nameEn: Volcanic
+    namePt: "Vulc\xE2nica"
+    nameEs: "Volc\xE1nica"
+    texture: {fileID: 2800000, guid: a651fab40fd94462aa744c928ece2132, type: 3}
+    color: {r: 0.95, g: 0.36, b: 0.1, a: 1}
+    unlock:
+      kind: 5
+      value: 10
+      requirementText: 
+  - id: florest
+    nameEn: Forest
+    namePt: Floresta
+    nameEs: Bosque
+    texture: {fileID: 2800000, guid: 77a427437214f4b09b7d242fbed41938, type: 3}
+    color: {r: 0.25, g: 0.6, b: 0.3, a: 1}
+    unlock:
+      kind: 3
+      value: 600
+      requirementText: 
+  - id: champion
+    nameEn: Champion
+    namePt: "Campe\xE3"
+    nameEs: Campeona
+    texture: {fileID: 2800000, guid: 6e27cf75b60064a4faa7474e286ae0d8, type: 3}
+    color: {r: 1, g: 0.8, b: 0.2, a: 1}
+    unlock:
+      kind: 6
+      value: 1
+      requirementText: 

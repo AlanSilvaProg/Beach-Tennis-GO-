@@ -35,10 +35,10 @@ public class RacketSlot : MonoBehaviour
     public Color ownedBorder = new Color(1f, 1f, 1f, 1f);
     public Color equippedBorder = new Color(0.45f, 1f, 0.5f, 1f);
     public Color lockedBorder = new Color(0.78f, 0.8f, 0.85f, 1f);
-    public Color lockedCard = new Color(0.36f, 0.37f, 0.4f, 1f);
+    public Color lockedCard = new Color(0.46f, 0.47f, 0.52f, 1f);
     public Color hiddenCard = new Color(0.27f, 0.28f, 0.31f, 1f);
-    [Tooltip("Tint of the picture of a locked racket (a little darker than an owned one).")]
-    public Color lockedPicture = new Color(0.72f, 0.72f, 0.76f, 1f);
+    [Tooltip("Tint of the picture of a locked racket: white, so that it is as clear as an owned one.")]
+    public Color lockedPicture = Color.white;
     [Tooltip("Tint of the picture of a hidden racket: it turns into a flat dark shape.")]
     public Color silhouette = new Color(0.12f, 0.13f, 0.17f, 1f);
 
