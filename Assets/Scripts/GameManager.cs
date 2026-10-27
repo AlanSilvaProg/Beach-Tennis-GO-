@@ -106,6 +106,7 @@ public class GameManager : MonoBehaviour
     int playerSets, aiSets;
     int pointsToWin = 11, setsToWin = 1; // rules of the current match (from GameSettings)
     bool newSetPending;                  // a set just ended and the match goes on: the next point starts a new set
+    public const int OnlinePoints = 11, OnlineSets = 1;
     int NoAdScore => noAdExtra > 0 ? pointsToWin + noAdExtra : 0;
     int server;
     int lastHitter;
@@ -275,6 +276,7 @@ public class GameManager : MonoBehaviour
         hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         bool lostMatch = state == State.MatchOver && aiScore > playerScore;
         hud.SetLoseTitle(lostMatch);
+        hud.SetRetryVisible(Online || level > 1);
         hud.SetLoseButtons(lostMatch, lostMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
         if (lostMatch && !loseLabelsSet)
         {
@@ -375,8 +377,8 @@ public class GameManager : MonoBehaviour
 
     void StartMatch()
     {
-        pointsToWin = GameSettings.PointsToWin;
-        setsToWin = GameSettings.SetsToWin;
+        pointsToWin = Online ? OnlinePoints : GameSettings.PointsToWin; // online: fixed rules, the settings are ignored
+        setsToWin = Online ? OnlineSets : GameSettings.SetsToWin;
         PokiEvents.Track("match", "start", "level", level, "points_to_win", pointsToWin, "sets_to_win", setsToWin, "reason", startReason);
         if (!Online) RacketProgress.ReportTrainingLevel(level); // rackets that unlock by Training level
         if (!Online && level > highestLevelSeen) { highestLevelSeen = level; PokiEvents.Track("level", "reached", "level", level); }
@@ -713,7 +715,7 @@ public class GameManager : MonoBehaviour
     // Guest: the rules come from the host; the first state arrives with the first snapshot.
     public void StartGuestMatch(int points, int sets)
     {
-        pointsToWin = points; setsToWin = sets;
+        pointsToWin = OnlinePoints; setsToWin = OnlineSets; // fixed online rules (the host sends the same values)
         playerScore = aiScore = 0; playerSets = aiSets = 0;
         matchTime = 0f; peerGone = false;
         stats = new MatchStats { level = 1 };

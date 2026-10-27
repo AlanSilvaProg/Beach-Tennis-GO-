@@ -231,7 +231,7 @@ public class OnlineSession : MonoBehaviour
         Role = info.role;
         if (sendGo)
         {
-            info.pointsToWin = GameSettings.PointsToWin; info.setsToWin = GameSettings.SetsToWin;
+            info.pointsToWin = GameManager.OnlinePoints; info.setsToWin = GameManager.OnlineSets;
             transport.Send(true, NetProtocol.Go(info.pointsToWin, info.setsToWin));
         }
         PokiEvents.Track("online", "found", "role", info.role.ToString(), "searched_s", Mathf.RoundToInt(Time.unscaledTime - startedAt));

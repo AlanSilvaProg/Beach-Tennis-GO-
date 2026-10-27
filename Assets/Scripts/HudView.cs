@@ -139,6 +139,18 @@ public class HudView : MonoBehaviour
         if (loseBackButton != null) loseBackButton.interactable = interactable;
     }
 
+    // Level 1 has nothing to retry (RETRY replays the current level, RESTART starts over): the button goes away and BACK takes its place.
+    float backY = float.NaN, retryY;
+    public void SetRetryVisible(bool visible)
+    {
+        if (retryButton == null || loseBackButton == null) return;
+        var back = loseBackButton.GetComponent<RectTransform>();
+        var retry = retryButton.GetComponent<RectTransform>();
+        if (float.IsNaN(backY)) { backY = back.anchoredPosition.y; retryY = retry.anchoredPosition.y; }
+        if (retryButton.gameObject.activeSelf != visible) retryButton.gameObject.SetActive(visible);
+        var p = back.anchoredPosition; p.y = visible ? backY : retryY; back.anchoredPosition = p;
+    }
+
     public void SetLoseLabels(string restart, string retry)
     {
         Apply(restartLabel, restart);
