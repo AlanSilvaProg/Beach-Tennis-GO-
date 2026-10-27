@@ -23,6 +23,14 @@ public class WinRewardPanel : MonoBehaviour
     [Tooltip("A row to copy (kept inactive): label on the left, value on the right, a thin line under it.")]
     public RectTransform rowTemplate;
 
+    [Header("Double the coins (rewarded ad)")]
+    [Tooltip("\"+N BONUS\" with a film icon: watching an ad gives the match's coins again. Part of the win screen layout, under the panel.")]
+    public Button doubleButton;
+    public TMP_Text doubleLabel;
+    public event System.Action DoubleClicked;
+    public bool DoubleShown => doubleButton != null && doubleButton.gameObject.activeSelf;
+    public int Total => total;
+
     [Header("Sizes (canvas units)")]
     public float headerHeight = 138f;
     public float rowHeight = 32f;
@@ -53,19 +61,42 @@ public class WinRewardPanel : MonoBehaviour
     readonly List<RectTransform> rows = new List<RectTransform>();
     readonly List<TMP_Text> rowValues = new List<TMP_Text>();
     readonly List<int> rowAmounts = new List<int>();
-    int total;
-    float shownAt;
+    int total, countFrom;
+    float shownAt, amountAt;
     bool running;
 
     float HeightFor(int rowCount) { return headerHeight + gap + 2f * listPadding + rowCount * rowHeight + bottomPadding; }
 
-    void Awake() { if (rowTemplate != null) rowTemplate.gameObject.SetActive(false); }
+    void Awake()
+    {
+        if (rowTemplate != null) rowTemplate.gameObject.SetActive(false);
+        if (doubleButton != null) { doubleButton.onClick.RemoveAllListeners(); doubleButton.onClick.AddListener(() => DoubleClicked?.Invoke()); doubleButton.gameObject.SetActive(false); }
+    }
+
+    // The ad was watched: the coins are given again; the number counts up to the new total and the button goes away.
+    public void Double()
+    {
+        countFrom = total;
+        total += total;
+        amountAt = Time.unscaledTime - countDelay; // the amount counts again from where it was
+        SetDoubleAvailable(false);
+    }
+
+    public void SetDoubleAvailable(bool available)
+    {
+        if (doubleButton == null || doubleButton.gameObject.activeSelf == available) return;
+        doubleButton.gameObject.SetActive(available);
+        if (available && doubleLabel != null) doubleLabel.text = "+" + total + " " + I18n.Tr("BONUS");
+    }
+
+    public void SetDoubleInteractable(bool interactable) { if (doubleButton != null) doubleButton.interactable = interactable; }
 
     // The lines are translated here (their label is the English text).
     public void Show(List<RewardLine> lines, int totalCoins)
     {
         ClearRows();
         total = totalCoins;
+        countFrom = 0;
         int n = Mathf.Max(1, lines.Count);
         Height = HeightFor(n);
         var rt = (RectTransform)transform;
@@ -95,8 +126,19 @@ public class WinRewardPanel : MonoBehaviour
         if (ribbonText != null) ribbonText.text = I18n.Tr("MATCH REWARD");
         if (coinsLabel != null) coinsLabel.text = I18n.Tr("RALLY COINS");
         if (amountText != null) amountText.text = "+0";
-        shownAt = Time.unscaledTime;
+        shownAt = amountAt = Time.unscaledTime;
         running = true;
+        SetDoubleAvailable(totalCoins > 0);
+    }
+
+    // Seconds after Show until the window has finished (coins counted, every row in place).
+    public float OpenDuration
+    {
+        get
+        {
+            float rowsEnd = rows.Count > 0 ? firstRowDelay + (rows.Count - 1) * rowInterval + rowCountTime : 0f;
+            return Mathf.Max(countDelay + countTime + landingPopTime * 0.5f, rowsEnd);
+        }
     }
 
     void ClearRows()
@@ -114,9 +156,10 @@ public class WinRewardPanel : MonoBehaviour
         float t = Time.unscaledTime - shownAt;
         if (amountText != null)
         {
-            float k = Mathf.Clamp01((t - countDelay) / Mathf.Max(0.05f, countTime));
-            amountText.text = "+" + Mathf.RoundToInt(total * (1f - Mathf.Pow(1f - k, 3f)));
-            amountText.transform.localScale = Vector3.one * CountScale(t - countDelay, countTime);
+            float ta = Time.unscaledTime - amountAt;
+            float k = Mathf.Clamp01((ta - countDelay) / Mathf.Max(0.05f, countTime));
+            amountText.text = "+" + Mathf.RoundToInt(countFrom + (total - countFrom) * (1f - Mathf.Pow(1f - k, 3f)));
+            amountText.transform.localScale = Vector3.one * CountScale(ta - countDelay, countTime);
         }
         for (int i = 0; i < rows.Count; i++)
         {
@@ -148,5 +191,5 @@ public class WinRewardPanel : MonoBehaviour
         return after >= 1f ? 1f : 1f + landingPop * Mathf.Sin(after * Mathf.PI) * (1f - after);
     }
 
-    public void Hide() { ClearRows(); }
+    public void Hide() { ClearRows(); SetDoubleAvailable(false); }
 }

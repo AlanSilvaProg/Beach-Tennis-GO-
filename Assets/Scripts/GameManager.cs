@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using UnityEngine;
 
-// Match flow and rules for the beach tennis PvE game: first to N points (win by 2) against an AI that gets tougher each level.
+// Match flow and rules for the beach tennis PvE game. Training: stars to fill (one per point needed, more every level), no defeat, five trophies per level.
+// Online: first to 11 points (win by 2), win or lose.
 // Point rules: the hitter scores only when the ball lands inside the opponent's half; out, net or own-side landings lose the point.
 public class GameManager : MonoBehaviour
 {
@@ -35,6 +37,27 @@ public class GameManager : MonoBehaviour
     [Tooltip("The rules and values of the reward of a won match (Assets/Data/RallyRewardConfig.asset).")]
     public RallyRewardConfig rewardConfig;
     public WinRewardPanel rewardPanel;
+    [Header("Training: stars and trophies")]
+    [Tooltip("The stars at the top of the screen during a Training match (one per point needed to win).")]
+    public StarMeter stars;
+    [Tooltip("The path of trophies on the win screen of a Training match.")]
+    public TrophyPath trophies;
+    [Tooltip("Trophies (matches) to win to finish level 1; every level asks for one more, up to Max Trophies; the level only goes up when the last one is won.")]
+    public int firstLevelTrophies = 2;
+    public int maxTrophies = 5;
+    [Tooltip("Points to win at level 1; every level needs one more, up to the maximum.")]
+    public int firstLevelPoints = 2;
+    public int maxTrainingPoints = 11;
+    [Tooltip("Played when the CPU wins a point in Training (a star is lost, or nothing happens when there is none).")]
+    public AudioClip starLost;
+    [Tooltip("Played when the player fills a star.")] public AudioClip starGained;
+    [Range(0f, 1f)] public float starGainedVolume = 0.9f;
+    [Range(0f, 1f)] public float starLostVolume = 0.9f;
+    [Header("End of match")]
+    [Tooltip("Seconds the winner's racket celebrates (somersault and hops, with the confetti) before the scoreboard goes and the win screen comes.")]
+    public float winCelebrationTime = 2.6f;
+    [Tooltip("Seconds the loser's racket takes to drop (and the winner's to cheer) before the lose screen comes.")]
+    public float loseFallTime = 1.4f;
 
     public enum LanguageChoice { Auto, English, Portuguese, Spanish }
 
@@ -111,6 +134,12 @@ public class GameManager : MonoBehaviour
     int server;
     int lastHitter;
     float matchTime; // seconds since the match started (stops when it ends)
+    int trainingStage;     // trophies already won in the current level (0..TrophiesFor(level)-1)
+    int winLevel, winStage; // the level and trophy of the match that was just won (what the win screen shows)
+    int pointsPlayed;      // Training: points played in the match (the stars go up and down, so they cannot tell who serves)
+    float resultDelay;     // seconds after the end of a match before its win / lose screen
+    bool resultBuilt;      // the win screen's extras (reward panel, trophies) have been shown
+    List<RewardLine> pendingLines; int pendingTotal; bool rewardDoubled;
     int infoLevel = -1;
     string shownNpcName = "", shownMyName = "";
     bool loseLabelsSet, winLabelsSet, namesSet, backLabelsSet;
@@ -166,6 +195,7 @@ public class GameManager : MonoBehaviour
             hud.RestartClicked -= OnRestartClicked; hud.RestartClicked += OnRestartClicked; // -= first: never subscribe twice
             hud.RetryClicked -= OnRetryClicked; hud.RetryClicked += OnRetryClicked;
             hud.ContinueClicked -= OnContinueClicked; hud.ContinueClicked += OnContinueClicked;
+            if (rewardPanel != null) { rewardPanel.DoubleClicked -= OnDoubleClicked; rewardPanel.DoubleClicked += OnDoubleClicked; }
             hud.BackClicked -= OnBackClicked; hud.BackClicked += OnBackClicked;
         }
         // ?mode=online in the address opens the online mode at once (to try it with two browser tabs); only the first time, so BACK still comes here
@@ -180,8 +210,7 @@ public class GameManager : MonoBehaviour
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
-        player.ResetPosition();
-        opponent.ResetPosition();
+        ResetRackets();
         ball.SetVisible(false);
     }
 
@@ -194,7 +223,7 @@ public class GameManager : MonoBehaviour
         // the buttons, not for moving the racket.
         bool inputLocked = state == State.Menu || state == State.MatchOver;
         if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
-        opponent.Tick(this);
+        if (state != State.MatchOver) opponent.Tick(this); // after the match the rackets only celebrate or fall
 
         switch (state)
         {
@@ -237,6 +266,15 @@ public class GameManager : MonoBehaviour
         return Input.touchCount > 0 ? es.IsPointerOverGameObject(Input.GetTouch(0).fingerId) : es.IsPointerOverGameObject();
     }
 
+    // Both rackets back on their resting places (after the celebration / fall poses too).
+    void ResetRackets()
+    {
+        player.Racket.ClearPose();
+        opponent.Racket.ClearPose();
+        player.ResetPosition();
+        opponent.ResetPosition();
+    }
+
     // Back to the main menu (leaving a mode): the scene stays behind it.
     public void ReturnToMenu()
     {
@@ -247,8 +285,7 @@ public class GameManager : MonoBehaviour
         matchTime = 0f;
         if (poki != null) poki.GameplayStop();
         ball.SetVisible(false);
-        player.ResetPosition();
-        opponent.ResetPosition();
+        ResetRackets();
         cameraRig.SetServing(true);
         EnterState(State.Menu);
     }
@@ -264,20 +301,27 @@ public class GameManager : MonoBehaviour
         string npcName = Online ? opponentName : "CPU";
         string myName = Online && localName.Length > 0 ? localName : I18n.Tr("PLAYER");
         if (!namesSet || npcName != shownNpcName || myName != shownMyName) { hud.SetNames(myName, npcName); shownNpcName = npcName; shownMyName = myName; namesSet = true; }
-        // The board hangs out of sight in the menu, drops when a match starts (and for every point and result), and in between stays pulled up
-        // with only the clock showing.
-        bool revealing = state == State.PointOver || state == State.MatchOver || Time.unscaledTime < scoreboardRevealUntil;
-        hud.SetScoreboard(state == State.Menu ? HangingSign.SignState.Hidden : revealing ? HangingSign.SignState.Shown : HangingSign.SignState.Peek);
-        bool wonMatch = state == State.MatchOver && playerScore > aiScore;
+        bool training = !Online;
+        bool matchEnded = state == State.MatchOver;
+        bool resultShown = matchEnded && stateTimer >= resultDelay; // after the celebration / fall: the win or lose screen
+        bool wonMatch = resultShown && playerScore > aiScore;
+        bool lostMatch = resultShown && aiScore > playerScore;
+        // Online, the board hangs out of sight in the menu, drops when a match starts (and for every point and result), and in between stays pulled
+        // up with only the clock showing; it is pulled up for the lose screen. Training has no board: the stars show the score.
+        bool revealing = state == State.PointOver || matchEnded || Time.unscaledTime < scoreboardRevealUntil;
+        hud.SetScoreboard(state == State.Menu || training || lostMatch ? HangingSign.SignState.Hidden : revealing ? HangingSign.SignState.Shown : HangingSign.SignState.Peek);
+        if (stars != null) stars.SetVisible(training && (MatchOn || (matchEnded && !resultShown)));
         if (menu != null) menu.SetVisible(state == State.Menu, true); // the Game mode button is for the menu only (not on the result screens)
-        if (state == State.MatchOver && !backLabelsSet) { hud.SetBackLabels(I18n.Tr("BACK")); backLabelsSet = true; }
+        if (matchEnded && !backLabelsSet) { hud.SetBackLabels(I18n.Tr("BACK")); backLabelsSet = true; }
         if (wonMatch && !winLabelsSet) { hud.SetWinLabels(I18n.Tr("YOU"), WonText(), Online ? I18n.Tr("PLAY AGAIN") : I18n.Tr("CONTINUE")); winLabelsSet = true; }
         hud.SetWinTitle(wonMatch);
-        hud.SetWinContinueInteractable(wonMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
-        bool lostMatch = state == State.MatchOver && aiScore > playerScore;
+        if (wonMatch && !resultBuilt) ShowWinExtras();
+        bool inputOpen = resultShown && stateTimer > resultDelay + matchOverInputDelay && !PokiService.AdPlaying;
+        hud.SetWinContinueInteractable(wonMatch && inputOpen);
+        if (rewardPanel != null) rewardPanel.SetDoubleInteractable(wonMatch && inputOpen);
         hud.SetLoseTitle(lostMatch);
-        hud.SetRetryVisible(Online || level > 1);
-        hud.SetLoseButtons(lostMatch, lostMatch && stateTimer > matchOverInputDelay && !PokiService.AdPlaying);
+        hud.SetRetryVisible(false); // the lose screen is only used online: PLAY AGAIN and BACK
+        hud.SetLoseButtons(lostMatch, lostMatch && inputOpen);
         if (lostMatch && !loseLabelsSet)
         {
             hud.SetLoseTitleLabels(I18n.Tr("YOU"), I18n.Tr("LOSE"));
@@ -294,8 +338,32 @@ public class GameManager : MonoBehaviour
             if (setsToWin > 1) info += "   |   " + I18n.Tr("Sets {0} - {1}", playerSets, aiSets);
         }
         hud.Info = info;
-        if (settings != null) settings.SetButtonVisible(!onlineScene && (state == State.Menu || state == State.MatchOver));
-        if (rackets != null) rackets.SetButtonVisible((state == State.Menu || (state == State.MatchOver && !wonMatch)) && (settings == null || !settings.IsOpen) && !onlineScene);
+        if (settings != null) settings.SetButtonVisible(!onlineScene && (state == State.Menu || resultShown));
+        if (rackets != null) rackets.SetButtonVisible((state == State.Menu || lostMatch) && (settings == null || !settings.IsOpen) && !onlineScene);
+    }
+
+    // The win screen proper (after the celebration): the reward panel counting up and, in Training, the path of trophies.
+    void ShowWinExtras()
+    {
+        resultBuilt = true;
+        if (rewardPanel != null && pendingLines != null) rewardPanel.Show(pendingLines, pendingTotal);
+        if (!Online && trophies != null) { trophies.Won = () => { if (sfx != null && starGained != null) Play(starGained, starGainedVolume, 1f); }; trophies.Show(winLevel, winStage, TrophiesFor(winLevel)); }
+    }
+
+    // "+N BONUS" (rewarded ad): the coins of the match again, but only when the player really watched the ad.
+    void OnDoubleClicked()
+    {
+        if (!CanUseContinue || rewardDoubled || pendingTotal <= 0) return;
+        System.Action<bool> done = granted =>
+        {
+            PokiEvents.Track("reward", "double", "coins", pendingTotal, "granted", granted);
+            if (!granted || state != State.MatchOver || rewardDoubled) return;
+            rewardDoubled = true;
+            RallyCoins.Add(pendingTotal);
+            if (rewardPanel != null) rewardPanel.Double();
+            pendingTotal *= 2;
+        };
+        if (poki == null) done(true); else poki.RewardedBreak(done);
     }
 
     // ---------- online ----------
@@ -325,29 +393,28 @@ public class GameManager : MonoBehaviour
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
 
-    bool CanUseContinue => state == State.MatchOver && playerScore > aiScore && stateTimer > matchOverInputDelay && !PokiService.AdPlaying;
+    bool CanUseContinue => state == State.MatchOver && playerScore > aiScore && stateTimer > resultDelay + matchOverInputDelay && !PokiService.AdPlaying;
 
     // CONTINUE (win screen): next level. Back into gameplay: the ad break (if any) comes here, then the next match starts.
     void OnContinueClicked()
     {
         if (!CanUseContinue) return;
         if (Online) { OnlineResult?.Invoke(true); return; } // there are no levels online: CONTINUE looks for the next opponent
-        PokiEvents.Track("match", "continue", "level", level, "next_level", level + 1);
-        startReason = "next_level";
-        level++;
+        PokiEvents.Track("match", "continue", "level", level, "stage", trainingStage);
+        startReason = "next_level"; // (the level and trophy already advanced when the match was won)
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
 
     // BACK (win and lose screens): to the main menu, where the game mode can be changed. The level reached is kept.
     void OnBackClicked()
     {
-        if (state != State.MatchOver || stateTimer <= matchOverInputDelay || PokiService.AdPlaying) return;
+        if (state != State.MatchOver || stateTimer <= resultDelay + matchOverInputDelay || PokiService.AdPlaying) return;
         PokiEvents.Track("match", "back", "from", playerScore > aiScore ? "win" : "lose", "level", level);
         if (Online) { OnlineResult?.Invoke(false); return; }
         ReturnToMenu();
     }
 
-    bool CanUseLoseButtons => state == State.MatchOver && aiScore > playerScore && stateTimer > matchOverInputDelay && !PokiService.AdPlaying;
+    bool CanUseLoseButtons => state == State.MatchOver && aiScore > playerScore && stateTimer > resultDelay + matchOverInputDelay && !PokiService.AdPlaying;
 
     // RESTART (standard, always available): starts everything over from the first level.
     void OnRestartClicked()
@@ -356,7 +423,7 @@ public class GameManager : MonoBehaviour
         if (Online) { OnlineResult?.Invoke(true); return; } // online, RESTART looks for another opponent
         PokiEvents.Track("match", "restart", "level", level);
         startReason = "restart";
-        level = startLevel;
+        level = startLevel; trainingStage = 0;
         if (poki != null) poki.CommercialBreak(StartMatch); else StartMatch();
     }
 
@@ -377,8 +444,9 @@ public class GameManager : MonoBehaviour
 
     void StartMatch()
     {
-        pointsToWin = Online ? OnlinePoints : GameSettings.PointsToWin; // online: fixed rules, the settings are ignored
-        setsToWin = Online ? OnlineSets : GameSettings.SetsToWin;
+        // online: 11 points, one set; training: one star per point, and the number grows with the level (the settings window does not matter)
+        pointsToWin = Online ? OnlinePoints : TrainingPoints(level);
+        setsToWin = Online ? OnlineSets : 1;
         PokiEvents.Track("match", "start", "level", level, "points_to_win", pointsToWin, "sets_to_win", setsToWin, "reason", startReason);
         if (!Online) RacketProgress.ReportTrainingLevel(level); // rackets that unlock by Training level
         if (!Online && level > highestLevelSeen) { highestLevelSeen = level; PokiEvents.Track("level", "reached", "level", level); }
@@ -386,6 +454,11 @@ public class GameManager : MonoBehaviour
         playerSets = aiSets = 0;
         newSetPending = false;
         matchTime = 0f;
+        pointsPlayed = 0;
+        resultDelay = 0f; resultBuilt = false; rewardDoubled = false; pendingLines = null; pendingTotal = 0;
+        if (rewardPanel != null) rewardPanel.Hide();
+        if (trophies != null) trophies.Hide();
+        if (stars != null) { if (Online) stars.SetVisible(false); else { stars.Setup(pointsToWin); stars.SetVisible(true); } }
         scoreboardRevealUntil = Time.unscaledTime + scoreboardRevealTime;
         stats = new MatchStats { level = Online ? 1 : level };
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -393,22 +466,24 @@ public class GameManager : MonoBehaviour
         server = 0;
         bannerKind = 0;
         if (opponent == ai) ai.SetLevel(level);
-        player.ResetPosition();
-        opponent.ResetPosition();
+        ResetRackets();
         PrepareServe();
     }
+
+    public int TrophiesFor(int forLevel) { return Mathf.Clamp(firstLevelTrophies + Mathf.Max(0, forLevel - 1), 1, Mathf.Max(1, maxTrophies)); }
+    public int TrainingPoints(int forLevel) { return Mathf.Min(maxTrainingPoints, firstLevelPoints + Mathf.Max(0, forLevel - 1)); }
 
     // The Rally coins of a won match: worked out from what happened, added to the player's coins and listed on the win screen.
     void GiveReward()
     {
         stats.won = true;
         stats.playerSets = playerSets; stats.cpuSets = aiSets;
-        stats.lastSetPlayerPoints = playerScore; stats.lastSetCpuPoints = aiScore;
+        stats.lastSetPlayerPoints = Online ? playerScore : stats.playerPoints; stats.lastSetCpuPoints = Online ? aiScore : stats.cpuPoints;
         stats.duration = matchTime;
         if (rewardConfig == null) rewardConfig = ScriptableObject.CreateInstance<RallyRewardConfig>(); // the defaults
         var lines = rewardConfig.Calculate(stats, out int total);
         RallyCoins.Add(total);
-        if (rewardPanel != null) rewardPanel.Show(lines, total);
+        pendingLines = lines; pendingTotal = total; // shown with the win screen, after the celebration
         PokiEvents.Track("reward", "match", "coins", total, "bonuses", lines.Count - 1);
     }
 
@@ -447,6 +522,7 @@ public class GameManager : MonoBehaviour
     // Win at pointsToWin with a lead of winBy; once both reach noAdScore, the next point wins (no advantage).
     bool IsMatchOver(int a, int b)
     {
+        if (!Online) return a >= pointsToWin; // Training: the stars are full
         if (NoAdScore > 0 && Mathf.Max(a, b) > NoAdScore) return true;
         return Mathf.Max(a, b) >= pointsToWin && Mathf.Abs(a - b) >= winBy;
     }
@@ -611,6 +687,7 @@ public class GameManager : MonoBehaviour
     void Score(int winner)
     {
         if (state != State.Rally) return;
+        if (!Online) { ScoreTraining(winner); return; }
         if (winner == 0) { playerScore++; stats.playerPoints++; } else { aiScore++; stats.cpuPoints++; }
         stats.longestRally = Mathf.Max(stats.longestRally, hitsInPoint);
         stats.maxDeficit = Mathf.Max(stats.maxDeficit, aiScore - playerScore);
@@ -645,6 +722,37 @@ public class GameManager : MonoBehaviour
         EnterState(State.PointOver);
     }
 
+    // Training: a point for the player fills a star, a point for the CPU empties one (nothing happens when none is filled; there is no defeat).
+    // The match is won when every star is full.
+    void ScoreTraining(int winner)
+    {
+        bool hadStar = playerScore > 0;
+        pointsPlayed++;
+        if (winner == 0) { playerScore++; stats.playerPoints++; }
+        else { stats.cpuPoints++; if (hadStar) playerScore--; }
+        stats.longestRally = Mathf.Max(stats.longestRally, hitsInPoint);
+        stats.maxDeficit = Mathf.Max(stats.maxDeficit, stats.cpuPoints - stats.playerPoints);
+        bannerKind = winner == 0 ? 1 : 2;
+        hud.Banner = BannerText(bannerKind);
+        Bleachers.Cheer(winner == 0 ? 0.9f : 0.4f);
+        if (stars != null) { if (winner == 0) stars.Gain(playerScore); else stars.Lose(playerScore, hadStar); }
+        if (winner == 0 && sfx != null && starGained != null) Play(starGained, starGainedVolume, 1f);
+        if (winner != 0 && sfx != null && starLost != null) Play(starLost, starLostVolume, 1f);
+        if (playerScore < pointsToWin) { EnterState(State.PointOver); return; }
+
+        // every star is full: a trophy is won, and the level goes up with the last one of the level
+        winLevel = level; winStage = trainingStage;
+        bool levelDone = trainingStage + 1 >= TrophiesFor(level);
+        PokiEvents.Track("match", "end", "result", "win", "level", level, "stage", trainingStage, "duration_s", Mathf.RoundToInt(matchTime),
+                         "player_points", stats.playerPoints, "cpu_points", stats.cpuPoints);
+        PokiEvents.Track("level", levelDone ? "complete" : "stage_complete", "level", level, "stage", trainingStage);
+        if (levelDone) { RacketProgress.ReportTrainingLevel(level + 1); trainingStage = 0; level++; } else trainingStage++;
+        playerSets = 1;
+        bannerKind = 0;
+        EnterState(State.MatchOver);
+        AfterMatchOver(true, true);
+    }
+
     // The banner of a point or a set, from its number (see NetSnapshot).
     string BannerText(int kind)
     {
@@ -658,13 +766,45 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // The confetti explodes from the centre of what the camera sees and then floats down; the speeds follow the visible height so it stays on screen.
+    void FitConfetti()
+    {
+        var cam = confetti.transform.parent != null ? confetti.transform.parent.GetComponent<Camera>() : Camera.main;
+        if (cam == null) return;
+        var t = confetti.transform;
+        float dist = Mathf.Max(1f, t.localPosition.z);
+        float halfH = dist * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad), halfW = halfH * cam.aspect;
+        float k = Mathf.Min(halfH, halfW * 1.4f) / 3.3f; // 1 for the landscape view; smaller on a narrow screen
+        t.localRotation = Quaternion.identity;
+        t.localPosition = new Vector3(0f, halfH * 0.1f, dist);
+        var main = confetti.main;
+        main.startSpeed = new ParticleSystem.MinMaxCurve(3f * k, 9f * k);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.09f * k, 0.16f * k);
+        main.startLifetime = new ParticleSystem.MinMaxCurve(3.5f, 5f);
+        main.gravityModifier = 0.6f * k;
+        var em = confetti.emission;
+        em.rateOverTime = 0f;
+        em.SetBursts(new[] { new ParticleSystem.Burst(0f, 110), new ParticleSystem.Burst(0.25f, 50) });
+        var shape = confetti.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.15f * k; shape.scale = Vector3.one;
+        shape.rotation = Vector3.zero; shape.position = Vector3.zero;
+        var lim = confetti.limitVelocityOverLifetime;
+        lim.enabled = true; lim.limit = 1.3f * k; lim.dampen = 0.1f;
+    }
+
     // What happens when a match ends: the reward of a win, the confetti behind the win title, the end of the Poki gameplay, the crowd.
     void AfterMatchOver(bool matchWon, bool reward)
     {
         if (matchWon && reward) GiveReward();
         if (matchWon && reward && Online) RacketProgress.ReportOnlineWin(); // (a win because the other player left does not count)
         hud.Banner = ""; // the win and lose screens show their own big centred titles (UpdateHud)
-        if (matchWon && confetti != null) { confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
+        // the winner's racket celebrates (somersault, hops) and the loser's drops; the screen comes after
+        resultDelay = matchWon ? winCelebrationTime : loseFallTime;
+        resultBuilt = false;
+        (matchWon ? player : opponent).Racket.Celebrate();
+        (matchWon ? opponent : player).Racket.Fall();
+        if (matchWon && confetti != null) { FitConfetti(); confetti.Clear(true); confetti.Play(true); } // confetti behind the win title
         if (poki != null) poki.GameplayStop();
         Bleachers.Cheer(matchWon ? 1f : 0.3f);
         PlayCrowd();
@@ -673,12 +813,11 @@ public class GameManager : MonoBehaviour
     void NextPoint()
     {
         if (newSetPending) { newSetPending = false; playerScore = aiScore = 0; }
-        int total = playerScore + aiScore;
-        bool endgame = playerScore >= pointsToWin - 1 && aiScore >= pointsToWin - 1;
+        int total = Online ? playerScore + aiScore : pointsPlayed;
+        bool endgame = Online && playerScore >= pointsToWin - 1 && aiScore >= pointsToWin - 1;
         server = ((endgame ? total % 2 : (total / servesPerTurn) % 2) + playerSets + aiSets) % 2; // each new set starts with the other side serving
         ball.SetVisible(false);
-        player.ResetPosition();
-        opponent.ResetPosition();
+        ResetRackets();
         PrepareServe();
     }
 
@@ -718,12 +857,13 @@ public class GameManager : MonoBehaviour
         pointsToWin = OnlinePoints; setsToWin = OnlineSets; // fixed online rules (the host sends the same values)
         playerScore = aiScore = 0; playerSets = aiSets = 0;
         matchTime = 0f; peerGone = false;
+        resultDelay = 0f; resultBuilt = false; rewardDoubled = false; pendingLines = null; pendingTotal = 0;
+        if (rewardPanel != null) rewardPanel.Hide();
         stats = new MatchStats { level = 1 };
         scoreboardRevealUntil = Time.unscaledTime + scoreboardRevealTime;
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         if (poki != null) poki.GameplayStart();
-        player.ResetPosition();
-        opponent.ResetPosition();
+        ResetRackets();
         ball.SetVisible(false);
         PokiEvents.Track("match", "start", "level", 1, "points_to_win", points, "sets_to_win", sets, "reason", "online_guest");
     }
@@ -779,8 +919,7 @@ public class GameManager : MonoBehaviour
                 lastHitter = server;
                 cameraRig.SetServing(true);
                 hitsInPoint = 0;
-                player.ResetPosition();
-                opponent.ResetPosition();
+                ResetRackets();
                 hud.Banner = "";
                 break;
             case State.Rally:
@@ -806,7 +945,7 @@ public class GameManager : MonoBehaviour
         if (state != State.Menu && state != State.MatchOver) matchTime += dt;
         bool inputLocked = state == State.Menu || state == State.MatchOver;
         if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
-        opponent.Tick(this);
+        if (state != State.MatchOver) opponent.Tick(this);
         if (state == State.Rally || state == State.PointOver) Simulate(false); else ball.Sync(court.groundY);
         UpdateHud();
     }

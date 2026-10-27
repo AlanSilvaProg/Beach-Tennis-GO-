@@ -12,15 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6078f4e9f26c34185865920244e06d31, type: 3}
   m_Name: RallyRewardConfig
   m_EditorClassIdentifier: Assembly-CSharp::RallyRewardConfig
-  victoryBase: 100
-  victoryPerLevel: 10
-  perfectMatch: 60
-  perfectSet: 25
+  victoryBase: 20
+  victoryPerLevel: 4
+  perfectMatch: 10
+  perfectSet: 10
   bigLeadMargin: 6
-  bigLead: 30
+  bigLead: 8
   longMatchSeconds: 180
-  longMatch: 25
-  perfectRallyHits: 20
-  perfectRally: 20
-  comebackDeficit: 4
-  comeback: 40
+  longMatch: 12
+  perfectRallyHits: 12
+  perfectRally: 10
+  comebackDeficit: 3
+  comeback: 15

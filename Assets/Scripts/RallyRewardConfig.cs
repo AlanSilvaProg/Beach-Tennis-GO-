@@ -8,27 +8,27 @@ public class RallyRewardConfig : ScriptableObject
 {
     [Header("Victory")]
     [Tooltip("Coins for winning a match.")]
-    public int victoryBase = 100;
+    public int victoryBase = 20;
     [Tooltip("Extra coins for every level above the first.")]
-    public int victoryPerLevel = 10;
+    public int victoryPerLevel = 4;
 
     [Header("Bonuses")]
     [Tooltip("PERFECT MATCH: the CPU did not score a single point in the whole match.")]
-    public int perfectMatch = 60;
+    public int perfectMatch = 10;
     [Tooltip("PERFECT SET: coins for every set won without the CPU scoring (only when it is not a perfect match and the match had more than one set).")]
-    public int perfectSet = 25;
+    public int perfectSet = 10;
     [Tooltip("BIG LEAD: the last set was won by at least this many points of difference (not given with a perfect match).")]
     public int bigLeadMargin = 6;
-    public int bigLead = 30;
+    public int bigLead = 8;
     [Tooltip("LONG MATCH: the match lasted at least this many seconds.")]
     public int longMatchSeconds = 180;
-    public int longMatch = 25;
+    public int longMatch = 12;
     [Tooltip("PERFECT RALLY: the longest point had at least this many racket hits.")]
     public int perfectRallyHits = 12;
-    public int perfectRally = 20;
+    public int perfectRally = 10;
     [Tooltip("COMEBACK: the player was behind by at least this many points in a set (or lost a set) and still won the match.")]
-    public int comebackDeficit = 4;
-    public int comeback = 40;
+    public int comebackDeficit = 3;
+    public int comeback = 15;
 
     // The list of lines (victory first) and, in `total`, their sum. A match that was lost pays nothing.
     public List<RewardLine> Calculate(MatchStats s, out int total)

@@ -75,6 +75,75 @@ public class Racket : MonoBehaviour
     public float SwingForwardSpeed => -SideSign * SwingVelocity.z;
     public float SwingSideSpeed => SwingVelocity.x;
 
+    // The end-of-match poses: the winner flips and hops from side to side, the loser drops to the ground. ClearPose (SnapSweep, i.e. every
+    // ResetPosition) gives the racket back to its controller.
+    enum Pose { None, Celebrate, Fall }
+    [Header("End of match poses")]
+    [Tooltip("Celebration: height of the somersault (m) and how long it takes (s).")]
+    public float flipHeight = 1.1f;
+    public float flipTime = 0.85f;
+    [Tooltip("Celebration: the little hops after the somersault: height (m), duration of each (s), side swing (m) and tilt (degrees).")]
+    public float hopHeight = 0.3f;
+    public float hopTime = 0.38f;
+    public float hopSwing = 0.8f;
+    public float hopTilt = 22f;
+    [Tooltip("Fall: seconds to reach the ground and the height of the racket head when it lies there.")]
+    public float fallTime = 0.5f;
+    public float lieHeight = 0.14f;
+    Pose pose;
+    float poseTime;
+    Vector3 poseOrigin;
+
+    public bool Posing => pose != Pose.None;
+    public void Celebrate() { pose = Pose.Celebrate; poseTime = 0f; poseOrigin = transform.position; }
+    public void Fall() { pose = Pose.Fall; poseTime = 0f; poseOrigin = transform.position; }
+    public void ClearPose()
+    {
+        if (pose == Pose.None) return;
+        pose = Pose.None;
+        transform.position = Clamp(poseOrigin); // back where it stood, at its normal height
+        lastPos = transform.position;
+    }
+
+    void ApplyPose(float dt)
+    {
+        poseTime += dt;
+        Vector3 p = poseOrigin;
+        float pitch = restPitch, roll = 0f, yaw = 0f;
+        if (pose == Pose.Celebrate)
+        {
+            if (poseTime < flipTime)
+            {
+                float u = poseTime / flipTime;
+                p.y = height + flipHeight * 4f * u * (1f - u);
+                pitch = 360f * Mathf.SmoothStep(0f, 1f, u);
+            }
+            else
+            {
+                float k = (poseTime - flipTime) / Mathf.Max(0.05f, hopTime);
+                float frac = k - Mathf.Floor(k);
+                p.y = height + hopHeight * 4f * frac * (1f - frac);
+                float limit = limitToArea ? maxX : 100f;
+                p.x = Mathf.Clamp(poseOrigin.x + hopSwing * Mathf.Sin(k * Mathf.PI), -limit, limit);
+                roll = hopTilt * Mathf.Cos(k * Mathf.PI);
+            }
+        }
+        else
+        {
+            float u = Mathf.Clamp01(poseTime / Mathf.Max(0.05f, fallTime));
+            float ease = u * u;
+            float after = poseTime - fallTime;
+            p.y = Mathf.Lerp(height, lieHeight, ease) + (after > 0f ? 0.1f * Mathf.Abs(Mathf.Sin(after * 11f)) * Mathf.Exp(-after * 7f) : 0f);
+            pitch = Mathf.Lerp(restPitch, -88f, ease);   // lies on its back, the face up
+            roll = Mathf.Lerp(0f, 12f, ease);
+            yaw = Mathf.Lerp(0f, 28f, ease);
+        }
+        transform.position = p;
+        transform.rotation = Quaternion.Euler(0f, facingYaw + yaw, 0f) * Quaternion.Euler(pitch, 0f, roll);
+        lastPos = p;
+        Velocity = smoothVel = Vector3.zero;
+    }
+
     Vector3 lastPos;
     Vector3 smoothVel;
     float leanRoll;  // the smoothed side lean (degrees)
@@ -158,6 +227,7 @@ public class Racket : MonoBehaviour
     // swept hit nor a huge swing speed.
     public void SnapSweep()
     {
+        pose = Pose.None;
         lastPos = transform.position;
         HitCenter = transform.position;
     }
@@ -165,6 +235,7 @@ public class Racket : MonoBehaviour
     void LateUpdate()
     {
         float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+        if (pose != Pose.None) { ApplyPose(dt); return; }
         Vector3 v = (transform.position - lastPos) / dt;
         history[historyHead] = new Sample { time = Time.time, v = v };
         historyHead = (historyHead + 1) % history.Length;

@@ -46,7 +46,7 @@ public class CameraRig : MonoBehaviour
     [Tooltip("On screens narrower than the reference shape the camera backs off to show more of the court width: this is the share of the distance the whole court would need (0 = never, 1 = fit it completely).")]
     [Range(0f, 1f)] public float narrowStrength = 0.6f;
     [Tooltip("Furthest the camera may back off for a narrow screen, as a multiple of the normal distance.")]
-    [Range(1f, 2f)] public float narrowMaxFactor = 1.4f;
+    [Range(1f, 2f)] public float narrowMaxFactor = 1.7f;
 
     [Header("Sideways follow")]
     [Tooltip("How much of the racket's sideways position the camera copies (0 = fixed, 1 = locked to the racket).")]

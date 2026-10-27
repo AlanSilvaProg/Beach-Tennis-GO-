@@ -42,7 +42,7 @@ MonoBehaviour:
     color: {r: 1, g: 0.78, b: 0.18, a: 1}
     unlock:
       kind: 3
-      value: 300
+      value: 150
       requirementText: 
   - id: happy
     nameEn: Happy
@@ -62,7 +62,7 @@ MonoBehaviour:
     color: {r: 0.58, g: 0.66, b: 0.78, a: 1}
     unlock:
       kind: 3
-      value: 500
+      value: 300
       requirementText: 
   - id: bronze
     nameEn: Bronze
@@ -82,7 +82,7 @@ MonoBehaviour:
     color: {r: 0.36, g: 0.64, b: 0.26, a: 1}
     unlock:
       kind: 3
-      value: 400
+      value: 500
       requirementText: 
   - id: vulcanic
     nameEn: Volcanic
@@ -102,7 +102,7 @@ MonoBehaviour:
     color: {r: 0.25, g: 0.6, b: 0.3, a: 1}
     unlock:
       kind: 3
-      value: 600
+      value: 800
       requirementText: 
   - id: champion
     nameEn: Champion
