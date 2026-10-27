@@ -2,7 +2,7 @@ using UnityEngine;
 
 // Arranges the win screen for any screen shape: the title ("YOU" / "WON!"), the reward panel and the CONTINUE / BACK buttons.
 //   portrait   one column: title, panel, CONTINUE, BACK
-//   landscape  two columns: the title on the left, the panel with the buttons under it on the right
+//   landscape  the title on the left (centred vertically on the reward panel), the panel on the right, the buttons under both in the middle of the screen
 // They are laid out in a design size and the whole group is scaled down (never up past Max Scale) to fit between the scoreboard at the top and the
 // bottom of the screen, so a tall panel (many bonuses) or a small screen never breaks the layout.
 public class WinScreenLayout : MonoBehaviour
@@ -81,18 +81,20 @@ public class WinScreenLayout : MonoBehaviour
         }
 
         designW = landscapeTitleWidth + columnGap + landscapePanelWidth;
-        float rightH = panelH + verticalGap + landscapeContinue.y + buttonGap + landscapeBack.y;
         float leftH = landscapeLine1.y + landscapeLine2.y - 10f;
-        designH = Mathf.Max(rightH, leftH);
-        float leftX = landscapeTitleWidth / 2f, rightX = landscapeTitleWidth + columnGap + landscapePanelWidth / 2f;
-        float ty = (designH - leftH) / 2f;
-        Put(line1, leftX, ty, landscapeLine1); ty += landscapeLine1.y - 10f;
-        Put(line2, leftX, ty, landscapeLine2);
-        float ry = (designH - rightH) / 2f;
+        // the title is centred vertically on the reward panel; the buttons are centred on the screen (the middle of the group), under both
+        float shift = Mathf.Max(0f, (leftH - panelH) / 2f);          // room above the panel when the title is taller than it
+        float panelTop = shift;
+        float titleTop = panelTop + (panelH - leftH) / 2f;
+        float leftX = landscapeTitleWidth / 2f, rightX = landscapeTitleWidth + columnGap + landscapePanelWidth / 2f, centreX = designW / 2f;
+        Put(line1, leftX, titleTop, landscapeLine1);
+        Put(line2, leftX, titleTop + landscapeLine1.y - 10f, landscapeLine2);
         panelRt.sizeDelta = new Vector2(landscapePanelWidth, panelH);
-        Put(panelRt, rightX, ry, new Vector2(landscapePanelWidth, panelH)); ry += panelH + verticalGap;
-        Put(continueButton, rightX, ry, landscapeContinue); ry += landscapeContinue.y + buttonGap;
-        Put(backButton, rightX, ry, landscapeBack);
+        Put(panelRt, rightX, panelTop, new Vector2(landscapePanelWidth, panelH));
+        float by = panelTop + panelH + verticalGap;
+        Put(continueButton, centreX, by, landscapeContinue); by += landscapeContinue.y + buttonGap;
+        Put(backButton, centreX, by, landscapeBack); by += landscapeBack.y;
+        designH = Mathf.Max(by, titleTop + leftH);
         SetStack(designW, designH, w, h);
     }
 
