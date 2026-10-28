@@ -9,7 +9,7 @@ using UnityEngine;
 public class AiRacketController : RacketController
 {
     [Header("Ready position")]
-    public Vector3 restPosition = new Vector3(0f, 1f, 4.8f);
+    public Vector3 restPosition = new Vector3(0f, 1f, 3.9f);
     [Tooltip("How much the ready position follows the player's sideways position (0 = stay centred).")]
     [Range(0f, 1f)] public float readyFollowX = 0.3f;
 
@@ -60,7 +60,7 @@ public class AiRacketController : RacketController
     [Tooltip("Flight time multiplier when the player is far out of position (faster ball).")]
     [Range(0.5f, 1f)] public float pressureFlight = 0.8f;
     [Tooltip("Where the return arrives, measured from the net (min, max).")]
-    public Vector2 depthRange = new Vector2(1.5f, 7.4f);
+    public Vector2 depthRange = new Vector2(1.2f, 6f);
     [Tooltip("Up to this level the CPU plays fewer short balls (balls that land close to the net).")]
     public int fewerShortShotsUpToLevel = 2;
     [Tooltip("A target shallower than this (m from the net) counts as a short ball.")]

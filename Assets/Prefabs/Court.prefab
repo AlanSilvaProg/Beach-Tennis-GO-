@@ -51,8 +51,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0258e79c62e3240bfb93b290ff80916a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Court
-  halfLength: 8
-  halfWidth: 4.2
+  halfLength: 6.5
+  halfWidth: 3.2
   groundY: 0
   area: {fileID: 4914263317224508652}
   lineNear: {fileID: 1836371163460013592}
