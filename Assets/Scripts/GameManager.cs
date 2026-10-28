@@ -114,14 +114,6 @@ public class GameManager : MonoBehaviour
     [Tooltip("The serve is hit when the racket is this close to the ball (m) or has passed its closest point, so the full speed and direction of the swipe are measured.")]
     public float serveContactRadius = 0.12f;
 
-    [Header("Baseline style (Training)")]
-    [Tooltip("Training is played from the baseline: the racket only slides sideways, a tap serves (the ball goes the opposite way of the racket), the ball bounces once in the court and runs to the other baseline, and whoever lets it pass loses the point. Online keeps the swipe style.")]
-    public bool baselineStyle = true;
-    [Tooltip("The rackets stand this far inside the baseline.")]
-    public float baselineInset = 0.6f;
-    [Tooltip("The player cannot serve until this many seconds after the ball is set up (a tap that starts the match or ends a point does not serve).")]
-    public float serveInputDelay = 0.35f;
-
     [Header("Simulation")]
     [Tooltip("Multiplies how fast the ball travels. Arcs stay the same, the ball just gets there sooner.")]
     public float ballSpeed = 1.6f;
@@ -167,7 +159,6 @@ public class GameManager : MonoBehaviour
     float accumulator;
     bool serveArmed;
     float servePrevDz = float.NaN; // racket-to-ball distance along z last frame (NaN = it was out of reach)
-    int bounces;                   // baseline style: times the ball has touched the sand since the last hit
 
     public Ball Ball => ball;
     public Net Net => net;
@@ -191,12 +182,6 @@ public class GameManager : MonoBehaviour
     // The AI may swing at its serve (a short moment after the ball is set up).
     public bool AiServeReady => AiServing && stateTimer > serveDelay;
     public bool Online => onlineScene;
-    // The baseline style (see baselineStyle): Training only.
-    public bool Baseline => baselineStyle && !onlineScene;
-    // Baseline style: times the ball has touched the sand since the last hit.
-    public int Bounces => bounces;
-    // |z| of the rackets' line (just inside the baselines).
-    public float BaselineZ => court.halfLength - baselineInset;
 
     void Awake()
     {
@@ -225,13 +210,6 @@ public class GameManager : MonoBehaviour
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
-        if (Baseline)
-        {
-            ball.bouncy = true;
-            if (cameraRig != null) { cameraRig.fixedView = true; cameraRig.fixedRacketInset = baselineInset; }
-            player.restPosition = new Vector3(0f, player.restPosition.y, -BaselineZ);
-            ai.restPosition = new Vector3(0f, ai.restPosition.y, BaselineZ);
-        }
         ResetRackets();
         ball.SetVisible(false);
     }
@@ -260,8 +238,7 @@ public class GameManager : MonoBehaviour
                 break;
             case State.Serving:
                 hud.Banner = Time.time < retryNoticeUntil ? I18n.Tr("Retry!") : ""; // no text about who serves or how: the ServeHint ghost teaches it
-                if (Baseline) BaselineServe();
-                else if (server == 0) TryHumanServe(player.Racket, 0, player);
+                if (server == 0) TryHumanServe(player.Racket, 0, player);
                 else if (Role == NetRole.Host) TryHumanServe(opponent.Racket, 1, opponent); // the other player serves with their own racket
                 else if (stateTimer > serveDelay) TryAiServe();
                 break;
@@ -524,19 +501,7 @@ public class GameManager : MonoBehaviour
         float z = (server == 0 ? -1f : 1f) * (court.halfLength - serveBaselineOffset);
         serveArmed = false;
         servePrevDz = float.NaN;
-        bounces = 0;
-        if (Baseline)
-        {
-            // the ball hangs just in front of the server's racket; the CPU picks a spot on its line
-            z = (server == 0 ? -1f : 1f) * (BaselineZ - 0.3f);
-            if (server == 1)
-            {
-                opponent.Racket.MoveTo(new Vector3(Random.Range(-serveBallSpread * 2f, serveBallSpread * 2f), opponent.Racket.height, BaselineZ));
-                opponent.Racket.SnapSweep();
-            }
-        }
-        float serveX = Baseline ? (server == 0 ? player.Racket.Position.x : opponent.Racket.Position.x)
-                     : server == 0 ? player.Racket.Position.x : Role == NetRole.Host ? opponent.Racket.Position.x : Random.Range(-serveBallSpread, serveBallSpread);
+        float serveX = server == 0 ? player.Racket.Position.x : Role == NetRole.Host ? opponent.Racket.Position.x : Random.Range(-serveBallSpread, serveBallSpread);
         ball.Place(new Vector3(serveX,
                                serveBallHeight, z), Vector3.zero);
         ball.SetVisible(true);
@@ -615,18 +580,6 @@ public class GameManager : MonoBehaviour
         servePrevDz = inReach ? dz : float.NaN;
     }
 
-    // Baseline style: the ball follows the server's racket sideways; a tap serves (the CPU serves on its own after a moment).
-    void BaselineServe()
-    {
-        var who = server == 0 ? (RacketController)player : opponent;
-        float maxX = court.halfWidth - serveSideMargin;
-        ball.Position = new Vector3(Mathf.Clamp(who.Racket.Position.x, -maxX, maxX), ball.Position.y, ball.Position.z);
-        ball.Sync(court.groundY);
-        if (stateTimer < serveInputDelay) return;
-        bool go = server == 0 ? Pressed() && !PointerOverUi() : stateTimer > serveDelay;
-        if (go) Hit(server, who);
-    }
-
     void TryAiServe()
     {
         if (InReach(opponent.Racket)) Hit(1, opponent);
@@ -651,7 +604,6 @@ public class GameManager : MonoBehaviour
         rallyTime += physicsStep;
         if (landed) PlayLanding(fall);
         if (!rules) return;
-        if (Baseline) { StepBaselineRules(landed); return; }
 
         if (landed) { ResolveLanding(); return; }
 
@@ -661,42 +613,6 @@ public class GameManager : MonoBehaviour
 
         if (state == State.Rally && (rallyTime > rallyTimeout || ball.Position.magnitude > ball.maxDistance))
             Score(1 - lastHitter);
-    }
-
-    // Baseline style. The first touch of the sand must be inside the opponent's half (otherwise the hitter loses the point); after it the ball runs
-    // to the other baseline, where the receiver's racket can hit it; if it gets past the baseline the receiver loses the point.
-    void StepBaselineRules(bool landed)
-    {
-        if (landed)
-        {
-            bounces++;
-            if (bounces == 1)
-            {
-                bool inside = court.Contains(ball.Position);
-                int landSide = ball.Position.z < 0f ? 0 : 1;
-                if (!(inside && landSide != lastHitter))
-                {
-                    if (announcer != null && !inside) announcer.Say(ShotAnnouncer.Call.Out);
-                    Score(1 - lastHitter);
-                    return;
-                }
-            }
-        }
-        if (state != State.Rally) return;
-        if (bounces >= 1)
-        {
-            if (lastHitter != 0 && ball.Velocity.z < 0f) CheckRacket(0, player);
-            if (state == State.Rally && lastHitter != 1 && ball.Velocity.z > 0f) CheckRacket(1, opponent);
-        }
-        if (state != State.Rally) return;
-        float limit = court.halfLength + 0.15f;
-        if (bounces >= 1 && ((lastHitter == 1 && ball.Position.z < -limit) || (lastHitter == 0 && ball.Position.z > limit)))
-        {
-            if (announcer != null && hitsInPoint == 1) announcer.Say(ShotAnnouncer.Call.Ace); // a serve nobody touched
-            Score(lastHitter);
-            return;
-        }
-        if (rallyTime > rallyTimeout || ball.Position.magnitude > ball.maxDistance) Score(1 - lastHitter);
     }
 
     void CheckRacket(int side, RacketController ctrl)
@@ -711,10 +627,9 @@ public class GameManager : MonoBehaviour
         ball.Velocity = ctrl.ComputeShot(this, contact);
         lastHitter = side;
         hitsInPoint++;
-        bounces = 0;
         rallyTime = 0f; // the timeout counts from the last hit, not from the serve (a long rally is not a stuck ball)
         PlayHit(side, ball.Velocity.magnitude);
-        if (announcer != null && state != State.Serving && !Baseline)
+        if (announcer != null && state != State.Serving)
             announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? opponent.Racket : player.Racket, side, contact, incoming, ball.Velocity);
         if (state == State.Serving)
         {
