@@ -18,6 +18,14 @@ public class PlayerRacketController : RacketController
     [Tooltip("Moving away from the net faster than this (m/s) at the moment of contact: the ball is pushed into the net and dies there.")]
     public float backwardNetSpeed = 1.2f;
 
+    [Header("Reach (how far a swipe can send the ball)")]
+    [Tooltip("Furthest the ball can travel (m, measured along the court from the racket) when the racket is still. Near the net that is enough to drop it over; from further back the ball does not reach the net and dies there.")]
+    public float stillReach = 3.2f;
+    [Tooltip("The same for a full-power swipe: it has to cover the whole court, baseline to baseline.")]
+    public float fullReach = 18f;
+    [Tooltip("A ball that would land less than this far past the net (m) is not a shot that crosses: it hits the net instead.")]
+    public float minClearance = 0.7f;
+
     [Header("Shot grades (speed towards the net, m/s, at the moment of contact: the same swipe that sets the depth)")]
     [Tooltip("STRONG: a medium swipe. Gets the bigger burst, no word.")]
     public float strongSwipeSpeed = 3.5f;
@@ -106,6 +114,17 @@ public class PlayerRacketController : RacketController
         Racket.MoveTo(hit);
     }
 
+    // The ball is pushed so that it reaches the net, hits it and drops on the hitter's side.
+    Vector3 NetShot(GameManager gm, Vector3 contact, float landX)
+    {
+        float netZ = -Racket.SideSign * 0.1f;
+        float dist = Mathf.Max(0.5f, Mathf.Abs(netZ - contact.z));
+        float tn = dist / weakShotSpeed;
+        float targetY = gm.Net.TopY * weakNetHeightFraction;
+        float g = gm.Ball.gravity;
+        return new Vector3((landX - contact.x) / tn * 0.3f, (targetY - contact.y) / tn + 0.5f * g * tn, (netZ - contact.z) / tn);
+    }
+
     // Depth comes from the swipe towards the net (sideways only aims it): a still or gentle racket drops the ball short over the net, a faster
     // one sends it deeper, a full-speed one to the far end. A racket moving away from the net pushes the ball into it.
     public override Vector3 ComputeShot(GameManager gm, Vector3 contact)
@@ -119,24 +138,21 @@ public class PlayerRacketController : RacketController
         float maxDepth = court.halfLength - landMargin;
         float landX = Mathf.Clamp(sideSpeed * sideSwipeFactor - dx * offCentreFactor, -maxX, maxX);
 
-        if (forwardSpeed < -backwardNetSpeed)
-        {
-            // Swinging backwards: the ball only reaches the net, hits it and drops on this side.
-            float netZ = -Racket.SideSign * 0.1f;
-            float dist = Mathf.Max(0.5f, Mathf.Abs(netZ - contact.z));
-            float tn = dist / weakShotSpeed;
-            float targetY = gm.Net.TopY * weakNetHeightFraction;
-            float g = gm.Ball.gravity;
-            return new Vector3((landX - contact.x) / tn * 0.3f, (targetY - contact.y) / tn + 0.5f * g * tn, (netZ - contact.z) / tn);
-        }
+        // Swinging backwards: the ball only reaches the net, hits it and drops on this side.
+        if (forwardSpeed < -backwardNetSpeed) return NetShot(gm, contact, landX);
 
         float power = Mathf.Pow(Mathf.Clamp01(forwardSpeed / Mathf.Max(0.1f, fullPowerSpeed)), powerCurve);
+        // A gentle swipe cannot send the ball far: from near the net it still drops over, from further back it falls short and dies at the net.
+        float reach = Mathf.Lerp(stillReach, fullReach, power);
+        float fromNet = Mathf.Abs(contact.z);
+        if (reach - fromNet < minClearance) return NetShot(gm, contact, landX);
         if (power <= dropShotMaxPower && Mathf.Abs(contact.z) <= dropShotDistance)
         {
             float dropX = Mathf.Clamp(landX, -maxX, maxX);
             return gm.Ball.SolveHit(contact, dropX, -Racket.SideSign * dropShotDepth, court.groundY + gm.Ball.radius, dropShotFlight, gm.Net);
         }
-        float landZ = -Racket.SideSign * (shortDepth + (maxDepth - shortDepth) * power);
+        float landDepth = Mathf.Min(shortDepth + (maxDepth - shortDepth) * power, reach - fromNet); // past the net, held to what the swipe can reach
+        float landZ = -Racket.SideSign * landDepth;
         float t = Mathf.Lerp(slowFlight, fastFlight, power);
         return gm.Ball.SolveHit(contact, landX, landZ, court.groundY + gm.Ball.radius, t, gm.Net);
     }
