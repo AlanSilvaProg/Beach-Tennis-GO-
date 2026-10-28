@@ -85,7 +85,7 @@ public class ServeHint : MonoBehaviour
     void Update()
     {
         if (game == null || ghost == null) return;
-        bool serving = game.PlayerServing && !PokiService.AdPlaying;
+        bool serving = game.PlayerServing && !game.Baseline && !PokiService.AdPlaying; // (the baseline style serves with a tap: no ghost)
         if (!serving)
         {
             waited = 0f; shownFor = 0f; wasServing = false;

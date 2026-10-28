@@ -484,6 +484,10 @@ MonoBehaviour:
   radius: 0.15
   gravity: 9.81
   maxDistance: 40
+  bouncy: 0
+  restitution: 0.7
+  friction: 0.88
+  settleSpeed: 1.2
   body: {fileID: 8440881724397484169}
   shadow: {fileID: 276329238695968507}
   shadowSize: 0.4
@@ -563,6 +567,10 @@ MonoBehaviour:
   lift: 0.02
   appearTime: 0.1
   minSpeed: 0.5
+  arcMaterial: {fileID: 0}
+  arcWidth: 0.12
+  arcColor: {r: 1, g: 0.95, b: 0.45, a: 0.95}
+  arcEndAlpha: 0.35
 --- !u!1 &8943047851352868138
 GameObject:
   m_ObjectHideFlags: 0

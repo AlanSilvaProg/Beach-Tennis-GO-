@@ -5886,6 +5886,9 @@ MonoBehaviour:
   serveArmDistance: 0.4
   serveMinHitSpeed: 0.4
   serveContactRadius: 0.12
+  baselineStyle: 1
+  baselineInset: 0.6
+  serveInputDelay: 0.35
   ballSpeed: 1.2
   targetFrameRate: 60
   physicsStep: 0.004166667
@@ -9167,7 +9170,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Aspect: 0.5625
+    - _Aspect: 1.3339844
     - _DashSpeed: 1
     - _MidRadius: 0.42
     - _RayStrength: 0.08
@@ -10647,7 +10650,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.4
+  m_fontSize: 60
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -13031,6 +13034,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2775828325101878933, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
+      propertyPath: arcMaterial
+      value: 
+      objectReference: {fileID: 2100000, guid: dfe48b12923e8411eb3b2ada6eb06bcd, type: 2}
     - target: {fileID: 5360632817631249231, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -13074,6 +13081,10 @@ PrefabInstance:
     - target: {fileID: 6992824263212154061, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
       propertyPath: m_Name
       value: Ball
+      objectReference: {fileID: 0}
+    - target: {fileID: 8035608001836803982, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
+      propertyPath: restitution
+      value: 0.55
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -17782,7 +17793,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 29.1
+  m_fontSize: 32
   m_fontSizeBase: 32
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -21073,6 +21084,7 @@ MonoBehaviour:
   starSpeedVariance: 50
   starTangent: 80
   starTime: 0.4
+  serveShowAfter: 2
 --- !u!1 &1258862038
 GameObject:
   m_ObjectHideFlags: 0
@@ -22541,7 +22553,7 @@ Transform:
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
   m_LocalRotation: {x: 0.15212339, y: 0, z: 0, w: 0.98836154}
-  m_LocalPosition: {x: 0, y: 7.0497594, z: -21.168686}
+  m_LocalPosition: {x: 0, y: 6.5622787, z: -19.622593}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -22586,6 +22598,11 @@ MonoBehaviour:
   deepBallZone: 3
   behindPullback: 1.5
   previewServing: 1
+  fixedView: 0
+  fixedRacketInset: 0.6
+  fixedBehind: 1.4
+  fixedSidePadding: 0.04
+  fixedSideReach: 0.15
 --- !u!1 &1353002720
 GameObject:
   m_ObjectHideFlags: 0

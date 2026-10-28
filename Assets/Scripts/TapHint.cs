@@ -33,7 +33,13 @@ public class TapHint : MonoBehaviour
     public float starTangent = 80f;
     public float starTime = 0.4f;
 
+    [Header("Serve tutorial (baseline style)")]
+    [Tooltip("The same hand taps on the racket while the player has to serve: the first serve of the session at once, the others after this many seconds without serving.")]
+    public float serveShowAfter = 2f;
+
     RectTransform area;
+    bool wasServing, firstServeDone, firstServeNow;
+    float serveWaited;
     float loopStart;
     float ringStart = -10f;
     float starStart = -10f;
@@ -54,7 +60,7 @@ public class TapHint : MonoBehaviour
 
     void Update()
     {
-        bool show = game != null && game.InMenu;
+        bool show = game != null && (game.InMenu || ServeTutorial());
         if (content != null && content.activeSelf != show) content.SetActive(show);
         if (!show) { wasShown = false; return; }
         if (!wasShown) { wasShown = true; loopStart = Time.unscaledTime; }
@@ -77,6 +83,21 @@ public class TapHint : MonoBehaviour
     }
 
     int lastLoop;
+
+    // Baseline style: the player's serve is a tap on the screen, so the hand shows it (no text).
+    bool ServeTutorial()
+    {
+        bool serving = game.Baseline && game.PlayerServing && !PokiService.AdPlaying;
+        if (!serving) { wasServing = false; return false; }
+        if (!wasServing)
+        {
+            wasServing = true; serveWaited = 0f;
+            firstServeNow = !firstServeDone;
+            firstServeDone = true;
+        }
+        serveWaited += Time.unscaledDeltaTime;
+        return firstServeNow || serveWaited >= serveShowAfter;
+    }
 
     Vector2 RacketOnCanvas()
     {

@@ -44,6 +44,10 @@ public class PlayerRacketController : RacketController
     [Tooltip("Aimed shots land at least this far inside the lines.")]
     public float landMargin = 0.5f;
 
+    [Header("Baseline style (Training)")]
+    [Tooltip("Flight time (simulated seconds) of the ball from the racket to its bounce: lower = faster ball.")]
+    public float baselineFlight = 1.05f;
+
     bool sawTouch;          // once a touch has been seen the mouse is ignored (a phone also reports an emulated mouse)
     bool havePointer;       // false until the pointer has been read since the last time it was lost
     Vector2 lastPointer;
@@ -80,6 +84,7 @@ public class PlayerRacketController : RacketController
         havePointer = true;
 
         pointer.x = Mathf.Clamp(pointer.x, 0f, Screen.width);
+        if (gm.Baseline) { MoveAlongBaseline(pointer, gm); return; }
         pointer.y = Mathf.Clamp(pointer.y + pointerLift * Screen.height, 0f, Screen.height);
         Ray ray = cam.ScreenPointToRay(pointer);
         if (ray.direction.y > -0.0001f) return;
@@ -96,9 +101,33 @@ public class PlayerRacketController : RacketController
         Racket.MoveTo(hit);
     }
 
+    // Baseline style: the racket stays on the baseline and only follows the pointer sideways (where the pointer's ray crosses that line).
+    void MoveAlongBaseline(Vector2 pointer, GameManager gm)
+    {
+        float z = -gm.BaselineZ;
+        Ray ray = cam.ScreenPointToRay(pointer);
+        if (Mathf.Abs(ray.direction.z) < 0.0001f) return;
+        float t = (z - ray.origin.z) / ray.direction.z;
+        if (t <= 0f) return;
+        float reach = gm.Court.halfWidth + 0.15f; // a little past the sidelines (the fixed camera frames just that)
+        Racket.MoveTo(new Vector3(Mathf.Clamp(ray.origin.x + ray.direction.x * t, -reach, reach), Racket.height, z));
+    }
+
+    // Baseline style: the ball goes the opposite way of the racket (straight when it is in the middle); hitting off-centre bends it a bit more.
+    Vector3 BaselineShot(GameManager gm, Vector3 contact)
+    {
+        Court court = gm.Court;
+        float reach = court.halfWidth - landMargin;
+        float side = Mathf.Clamp(Racket.Position.x / court.halfWidth, -1f, 1f);
+        float dx = contact.x - Racket.HitCenter.x;
+        float aimX = Mathf.Clamp(-side * reach - dx * offCentreFactor, -reach, reach);
+        return gm.Ball.SolveBounceShot(contact, aimX, -Racket.SideSign * gm.BaselineZ, baselineFlight, gm.Net, court.groundY);
+    }
+
     // Any shot above the minimum power lands inside the opponent's court; only a weak touch can fail.
     public override Vector3 ComputeShot(GameManager gm, Vector3 contact)
     {
+        if (gm.Baseline) return BaselineShot(gm, contact);
         float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
         float speedScore = forwardSpeed * forwardWeight + Mathf.Abs(sideSpeed) * sideWeight;
         float power = Mathf.Clamp01(speedScore / maxSwipeSpeed);
