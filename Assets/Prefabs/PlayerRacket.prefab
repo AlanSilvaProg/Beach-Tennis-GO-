@@ -110,7 +110,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerRacketController
   cam: {fileID: 0}
-  restPosition: {x: 0, y: 1, z: -3.9}
+  restPosition: {x: 0, y: 1, z: -4.8}
   pointerLift: 0.087
   maxSwipeSpeed: 8
   forwardWeight: 1

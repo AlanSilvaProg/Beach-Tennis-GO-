@@ -5,9 +5,9 @@ public class Court : MonoBehaviour
 {
     [Header("Dimensions (metres, from the centre)")]
     [Tooltip("Distance from the net to each baseline.")]
-    public float halfLength = 6.5f;
+    public float halfLength = 8f;
     [Tooltip("Distance from the centre line to each sideline.")]
-    public float halfWidth = 3.2f;
+    public float halfWidth = 4.2f;
     public float groundY = 0f;
 
     [Header("Visuals")]

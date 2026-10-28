@@ -6,7 +6,7 @@ public class PlayerRacketController : RacketController
 {
     [Header("Input")]
     public Camera cam;
-    public Vector3 restPosition = new Vector3(0f, 1f, -3.9f);
+    public Vector3 restPosition = new Vector3(0f, 1f, -4.8f);
     [Tooltip("The racket sits this far above the finger/mouse, as a fraction of the screen height (so the pointer does not cover it).")]
     [Range(0f, 0.25f)] public float pointerLift = 0.06f;
 

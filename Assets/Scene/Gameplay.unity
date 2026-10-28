@@ -6953,7 +6953,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Bleachers
   side: 1
-  startX: 7.3
+  startX: 8.7
   halfLength: 12.5
   tiers: 5
   tierDepth: 1
@@ -8689,7 +8689,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Bleachers
   side: 0
-  startX: 7.3
+  startX: 8.7
   halfLength: 12.5
   tiers: 5
   tierDepth: 1
@@ -9167,7 +9167,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Aspect: 1.3339844
+    - _Aspect: 0.5625
     - _DashSpeed: 1
     - _MidRadius: 0.42
     - _RayStrength: 0.08
@@ -10647,7 +10647,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 60
+  m_fontSize: 15.4
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -13031,14 +13031,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 2738379256791027933, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
-      propertyPath: maxSpeed
-      value: 15
-      objectReference: {fileID: 0}
-    - target: {fileID: 2738379256791027933, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
-      propertyPath: minSpeed
-      value: 2
-      objectReference: {fileID: 0}
     - target: {fileID: 5360632817631249231, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -13082,10 +13074,6 @@ PrefabInstance:
     - target: {fileID: 6992824263212154061, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
       propertyPath: m_Name
       value: Ball
-      objectReference: {fileID: 0}
-    - target: {fileID: 8035608001836803982, guid: e0d9ae4bf88f145e2b3d2b8b7163f122, type: 3}
-      propertyPath: gravity
-      value: 7
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -17794,7 +17782,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 32
+  m_fontSize: 29.1
   m_fontSizeBase: 32
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -22553,7 +22541,7 @@ Transform:
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
   m_LocalRotation: {x: 0.15212339, y: 0, z: 0, w: 0.98836154}
-  m_LocalPosition: {x: 0, y: 4.031299, z: -11.595352}
+  m_LocalPosition: {x: 0, y: 7.0497594, z: -21.168686}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -22578,10 +22566,10 @@ MonoBehaviour:
   pitch: 17.5
   fieldOfView: 45.8
   referenceAspect: 1.6
-  distanceFactor: 0.66
+  distanceFactor: 0.879
   margin: 0.15
   viewportPadding: 0.02
-  minDistance: 3.5
+  minDistance: 6
   wideStartAspect: 1.9
   wideFullAspect: 2.5
   wideZoom: 0.8
@@ -22590,8 +22578,8 @@ MonoBehaviour:
   followX: 0.6
   maxPan: 2
   racketPadding: {x: 0.08, y: 0.1}
-  maxPullback: 1.25
-  serveDistanceFactor: 1
+  maxPullback: 1.3
+  serveDistanceFactor: 1.033
   moveSmoothTime: 0.2
   lookBehindLine: 1
   behindLine: 3.5

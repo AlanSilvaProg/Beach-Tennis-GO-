@@ -46,7 +46,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Net
   height: 2.34
-  width: 8.2
+  width: 10.2
   thickness: 0.04
   bandHeight: 2.93
   bounceBack: 0.25

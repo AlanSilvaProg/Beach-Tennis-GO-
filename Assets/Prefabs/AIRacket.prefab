@@ -81,7 +81,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef1ebacbdd39c4847b9bbdf267e7ab26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AiRacketController
-  restPosition: {x: 0, y: 1, z: 3.9}
+  restPosition: {x: 0, y: 1, z: 4.8}
   speedBase: 4.5
   speedPerLevel: 0.9
   errorBase: 0.9
@@ -102,6 +102,6 @@ MonoBehaviour:
   flightPerLevel: -0.04
   flightMin: 0.55
   flightJitter: {x: 0.9, y: 1.15}
-  depthRange: {x: 1.2, y: 6}
+  depthRange: {x: 1.5, y: 7.4}
   landXRange: {x: 0.3, y: 3.5}
   aimAwayChance: 0.7
