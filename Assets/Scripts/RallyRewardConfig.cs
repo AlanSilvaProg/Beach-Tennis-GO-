@@ -30,6 +30,13 @@ public class RallyRewardConfig : ScriptableObject
     public int comebackDeficit = 3;
     public int comeback = 15;
 
+    [Tooltip("PERFECT SHOTS: coins for every perfect shot of the player (a fast one that crosses the whole court), up to the cap.")]
+    public int perfectShot = 3;
+    public int perfectShotCap = 4;
+    [Tooltip("GREAT SHOTS: coins for every very good shot of the player, up to the cap.")]
+    public int greatShot = 1;
+    public int greatShotCap = 6;
+
     // The list of lines (victory first) and, in `total`, their sum. A match that was lost pays nothing.
     public List<RewardLine> Calculate(MatchStats s, out int total)
     {
@@ -44,6 +51,8 @@ public class RallyRewardConfig : ScriptableObject
         if (s.duration >= longMatchSeconds) Add(lines, "LONG MATCH", longMatch);
         if (s.longestRally >= perfectRallyHits) Add(lines, "PERFECT RALLY", perfectRally);
         if (s.maxDeficit >= comebackDeficit || s.cpuSets > 0) Add(lines, "COMEBACK", comeback);
+        Add(lines, "PERFECT SHOTS", perfectShot * Mathf.Min(s.perfectShots, perfectShotCap));
+        Add(lines, "GREAT SHOTS", greatShot * Mathf.Min(s.greatShots, greatShotCap));
         foreach (var l in lines) total += l.amount;
         return lines;
     }

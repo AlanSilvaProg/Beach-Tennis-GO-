@@ -104,6 +104,10 @@ public static class I18n
 
     static readonly Dictionary<string, string> Pt = new Dictionary<string, string>
     {
+        { "PERFECT!", "PERFEITO!" },
+        { "GREAT SHOT!", "QUE GOLPE!" },
+        { "PERFECT SHOTS", "RAQUETADAS PERFEITAS" },
+        { "GREAT SHOTS", "RAQUETADAS ÓTIMAS" },
         { "Point!", "Ponto!" },
         { "CPU point", "Ponto da CPU" },
         { "SETTINGS", "CONFIGURAÇÕES" },
@@ -161,6 +165,10 @@ public static class I18n
 
     static readonly Dictionary<string, string> Es = new Dictionary<string, string>
     {
+        { "PERFECT!", "¡PERFECTO!" },
+        { "GREAT SHOT!", "¡QUÉ GOLPE!" },
+        { "PERFECT SHOTS", "GOLPES PERFECTOS" },
+        { "GREAT SHOTS", "GRANDES GOLPES" },
         { "Point!", "¡Punto!" },
         { "CPU point", "Punto de la CPU" },
         { "YOU", "¡HAS" },

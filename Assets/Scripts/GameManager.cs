@@ -18,6 +18,8 @@ public class GameManager : MonoBehaviour
     public CameraRig cameraRig;
     public HudView hud;
     public ShotAnnouncer announcer;
+    [Tooltip("Racket hit effects and the PERFECT / GREAT SHOT words. Made at run time when left empty.")]
+    public ShotFx shotFx;
     [Tooltip("Poki SDK events (gameplay start/stop and the ad break between matches). Optional.")]
     public PokiService poki;
     [Tooltip("Main menu (game mode button and selection window), shown while no match is on.")]
@@ -207,6 +209,7 @@ public class GameManager : MonoBehaviour
         ChannelMute.Attach(sfx, AudioChannel.Sfx);
         if (!loadedReported) { loadedReported = true; PokiEvents.Track("game", "loaded", "language", I18n.Code); } // once, not at every scene
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
+        if (shotFx == null) shotFx = hud != null && hud.winLine1 != null ? ShotFx.Create(gameObject, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : ShotFx.Create(gameObject, null, null);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
@@ -461,6 +464,7 @@ public class GameManager : MonoBehaviour
         if (stars != null) { if (Online) stars.SetVisible(false); else { stars.Setup(pointsToWin); stars.SetVisible(true); } }
         scoreboardRevealUntil = Time.unscaledTime + scoreboardRevealTime;
         stats = new MatchStats { level = Online ? 1 : level };
+        if (shotFx != null) shotFx.Clear();
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         if (poki != null) poki.GameplayStart(); // the player's first input of the match
         server = 0;
@@ -629,8 +633,21 @@ public class GameManager : MonoBehaviour
         hitsInPoint++;
         rallyTime = 0f; // the timeout counts from the last hit, not from the serve (a long rally is not a stuck ball)
         PlayHit(side, ball.Velocity.magnitude);
+        var quality = ShotQuality.Normal;
+        if (shotFx != null)
+        {
+            quality = state == State.Serving ? ShotQuality.Normal : shotFx.Evaluate(ball, court, contact, ball.Velocity);
+            float speed = ball.Velocity.magnitude;
+            shotFx.Hit(contact, quality, speed, ball.Velocity, side == 0);
+            ctrl.Racket.Punch(shotFx.Power(speed));
+            if (side == 0)
+            {
+                if (quality == ShotQuality.Perfect) stats.perfectShots++;
+                else if (quality == ShotQuality.VeryGood) stats.greatShots++;
+            }
+        }
         if (announcer != null && state != State.Serving)
-            announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? opponent.Racket : player.Racket, side, contact, incoming, ball.Velocity);
+            announcer.OnHit(ball, court, ctrl.Racket, side == 0 ? opponent.Racket : player.Racket, side, contact, incoming, ball.Velocity, quality);
         if (state == State.Serving)
         {
             accumulator = 0f;

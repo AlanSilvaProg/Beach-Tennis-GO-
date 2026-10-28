@@ -187,6 +187,21 @@ public class Racket : MonoBehaviour
     void OnValidate() { ApplyModel(); }
     void Awake() { ApplyModel(); lastPos = transform.position; }
 
+    // A quick squash and stretch of the model when it hits the ball (strength 0-1; the stronger the shot the bigger the punch).
+    public void Punch(float strength) { punch = Mathf.Clamp01(strength); punchTime = 0f; }
+    float punch, punchTime = 99f;
+    const float PunchDuration = 0.22f;
+
+    void ApplyPunch()
+    {
+        if (model == null || punchTime > PunchDuration + 0.1f) return;
+        punchTime += Time.deltaTime;
+        float k = Mathf.Clamp01(punchTime / PunchDuration);
+        float s = 1f + punch * 0.35f * Mathf.Sin(k * Mathf.PI) * (1f - k * 0.4f);
+        model.localScale = Vector3.one * modelScale * s;
+        model.localPosition = new Vector3(0f, -headCenter * modelScale * s, 0f); // keeps the head where it was
+    }
+
     void ApplyModel()
     {
         if (model == null) return;
@@ -235,6 +250,7 @@ public class Racket : MonoBehaviour
     void LateUpdate()
     {
         float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+        ApplyPunch();
         if (pose != Pose.None) { ApplyPose(dt); return; }
         Vector3 v = (transform.position - lastPos) / dt;
         history[historyHead] = new Sample { time = Time.time, v = v };

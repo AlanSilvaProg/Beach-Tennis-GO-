@@ -13,6 +13,7 @@ public struct MatchStats
     public int perfectSets;                 // sets the player won without the CPU scoring
     public float duration;                  // seconds
     public int longestRally;                // racket hits (serve included) in the longest point
+    public int perfectShots, greatShots;    // the player's perfect and very good shots (see ShotFx)
     public int maxDeficit;                  // most points the player was behind in a set
 }
 

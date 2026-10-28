@@ -16,7 +16,9 @@ Evento sem arquivo no idioma cai no inglês. Depois de trocar arquivos, `Tools >
 | Ace | Saque que cai no lado adversário sem ninguém tocar | 1 Ace! · 2 Untouchable! · 3 Ace, no chance! | 1 Ace! · 2 Indefensável! · 3 Ace, sem chance! | 1 ¡Ace! · 2 ¡Imparable! · 3 ¡Ace, sin opción! |
 | NoAd | Início do ponto em 15x15 (o próximo ponto vence) | 1 No-Ad point! · 2 Next point wins! · 3 Sudden death! | 1 Ponto decisivo! · 2 Próximo ponto vence! · 3 Morte súbita! | 1 ¡Punto de oro! · 2 ¡El próximo punto gana! · 3 ¡Muerte súbita! |
 | MatchPoint | Início do ponto que pode decidir a partida | 1 Match point! · 2 Match point, here we go! · 3 Game on the line! | 1 Match point! · 2 Ponto da vitória! · 3 Valendo o jogo! | 1 ¡Punto de partido! · 2 ¡Punto de partido, atención! · 3 ¡Se define el partido! |
+| VeryGood | Golpe do jogador muito bom: rápido e cruza a quadra (também mostra "QUE GOLPE!" na tela e dá bônus na premiação) | 1 What a shot! · 2 Beautiful! · 3 Great hit! | 1 Que golpe! · 2 Lindo! · 3 Que pancada! | 1 ¡Qué golpe! · 2 ¡Hermoso! · 3 ¡Qué pelotazo! |
+| Perfect | Golpe do jogador perfeito: o mais forte, atravessa a quadra até o fundo (mostra "PERFEITO!" e dá mais bônus) | 1 Perfect! · 2 Absolutely perfect! · 3 Flawless! | 1 Perfeito! · 2 Perfeito demais! · 3 Sem defeito! | 1 ¡Perfecto! · 2 ¡Perfectísimo! · 3 ¡Impecable! |
 
-Notas: em 15x15 tocam `NoAd` e logo depois `MatchPoint`. Out, Ace, NoAd e MatchPoint cortam a fala anterior; os golpes (Smash a Block) respeitam um intervalo de 1,5 s.
+Notas: em 15x15 tocam `NoAd` e logo depois `MatchPoint`. Out, Ace, NoAd e MatchPoint cortam a fala anterior; os golpes (Smash a Block) respeitam um intervalo de 1,5 s. VeryGood e Perfect (só golpes do jogador) tomam o lugar do nome do golpe e têm intervalo de 1 s.
 
 Geração automática: `scripts/generate-voices.py` (ElevenLabs `eleven_v4`, stability 0,5, similarity 0,75, style 0, `language_code` por idioma). Toda fala leva `[excited]` no começo. `[crowd cheering]` foi testado e removido (ficou estranho); o conjunto `CHEER` do script está vazio.

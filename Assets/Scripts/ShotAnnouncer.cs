@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 // Announcer voice: calls the type of shot after a hit (Smash, Drop shot, Lob, Drive, Acceleration, Block) and the big moments
-// (Out, Ace, No-Ad, Match point). Every call has several clips and one is picked at random (never the same twice in a row).
+// (Out, Ace, No-Ad, Match point), and praises the player's very good and perfect shots (see ShotFx for how those are told apart). Every call has several clips and one is picked at random (never the same twice in a row).
 // Voices live in Assets/StreamingAssets/Voice/<en|pt|es>/Voice_<Call>_<n>.wav (or .mp3/.ogg) and are NOT part of the game data:
 // only the player's language (see I18n) is downloaded, at start, so the other languages cost no loading time. Calls the language
 // has no clip for fall back to English. Each folder has an index.txt (written by Tools > Beach Tennis GO > Update Voice Manifests,
@@ -13,7 +13,7 @@ using UnityEngine.Networking;
 // The numbers below are in the game's own units (ball speed before the "ballSpeed" multiplier): turn on logShots to tune them.
 public class ShotAnnouncer : MonoBehaviour
 {
-    public enum Call { Smash, DropShot, Lob, Drive, Acceleration, Block, Out, Ace, NoAd, MatchPoint }
+    public enum Call { Smash, DropShot, Lob, Drive, Acceleration, Block, Out, Ace, NoAd, MatchPoint, VeryGood, Perfect }
 
     [Header("Voice")]
     public AudioSource voice;
@@ -26,6 +26,8 @@ public class ShotAnnouncer : MonoBehaviour
     public float shotCallCooldown = 1.5f;
     [Tooltip("Also call the CPU's shots.")]
     public bool callCpuShots = true;
+    [Tooltip("Minimum time between two praises of a very good or perfect shot (s).")]
+    public float praiseCooldown = 1f;
     [Tooltip("Writes the measurements of every hit to the console (to tune the thresholds).")]
     public bool logShots;
 
@@ -56,7 +58,7 @@ public class ShotAnnouncer : MonoBehaviour
     readonly Dictionary<Call, List<AudioClip>> clips = new Dictionary<Call, List<AudioClip>>();
     readonly Dictionary<Call, int> lastPick = new Dictionary<Call, int>();
     readonly Queue<AudioClip> queue = new Queue<AudioClip>();
-    float nextShotCall;
+    float nextShotCall, nextPraise;
 
     bool loading;
 
@@ -171,8 +173,16 @@ public class ShotAnnouncer : MonoBehaviour
 
     // Called by the GameManager for every hit after the serve. `incoming` is the ball velocity just before the racket touched it,
     // `outgoing` the one it leaves with.
-    public void OnHit(Ball ball, Court court, Racket hitter, Racket opponent, int side, Vector3 contact, Vector3 incoming, Vector3 outgoing)
+    public void OnHit(Ball ball, Court court, Racket hitter, Racket opponent, int side, Vector3 contact, Vector3 incoming, Vector3 outgoing, ShotQuality quality = ShotQuality.Normal)
     {
+        // The player's very good and perfect shots are praised instead of named.
+        if (side == 0 && quality >= ShotQuality.VeryGood && Time.time >= nextPraise)
+        {
+            nextPraise = Time.time + praiseCooldown;
+            nextShotCall = Time.time + shotCallCooldown;
+            Say(quality == ShotQuality.Perfect ? Call.Perfect : Call.VeryGood);
+            return;
+        }
         if (side == 1 && !callCpuShots) return;
         bool matched = Classify(ball, court, hitter, opponent, contact, incoming, outgoing, out Call call);
         if (!matched || Time.time < nextShotCall || UnityEngine.Random.value > shotCallChance) return;
@@ -180,15 +190,22 @@ public class ShotAnnouncer : MonoBehaviour
         Say(call);
     }
 
+    // Where (x, z) a ball hit at `contact` with velocity `v` first touches the ground.
+    public static Vector2 Landing(Ball ball, Court court, Vector3 contact, Vector3 v)
+    {
+        float g = ball.gravity;
+        float y0 = court.groundY + ball.radius;
+        float disc = v.y * v.y + 2f * g * (contact.y - y0);
+        float t = disc >= 0f ? (v.y + Mathf.Sqrt(disc)) / g : 0f;
+        return new Vector2(contact.x + v.x * t, contact.z + v.z * t);
+    }
+
     bool Classify(Ball ball, Court court, Racket hitter, Racket opponent, Vector3 contact, Vector3 incoming, Vector3 v, out Call call)
     {
         call = Call.Drive;
         float speed = v.magnitude;
         float g = ball.gravity;
-        float y0 = court.groundY + ball.radius;
-        float disc = v.y * v.y + 2f * g * (contact.y - y0);
-        float t = disc >= 0f ? (v.y + Mathf.Sqrt(disc)) / g : 0f;
-        Vector2 land = new Vector2(contact.x + v.x * t, contact.z + v.z * t);
+        Vector2 land = Landing(ball, court, contact, v);
         float depth = Mathf.Abs(land.y);
         float apex = contact.y + (v.y > 0f ? v.y * v.y / (2f * g) : 0f);
         float above = contact.y - hitter.height;
