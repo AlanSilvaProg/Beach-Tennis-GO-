@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // Mouse / touch controlled racket. It only slides left/right and forward/back, inside the Racket's play area.
-// Forward swipe = power, sideways swipe = power + angle, still or backwards = weak shot.
+// Forward swipe = depth (gentle: short, fast: to the far end), sideways swipe = angle, backwards = the ball dies at the net.
 public class PlayerRacketController : RacketController
 {
     [Header("Input")]
@@ -10,20 +10,28 @@ public class PlayerRacketController : RacketController
     [Tooltip("The racket sits this far above the finger/mouse, as a fraction of the screen height (so the pointer does not cover it).")]
     [Range(0f, 0.25f)] public float pointerLift = 0.06f;
 
-    [Header("Power")]
-    [Tooltip("Weighted racket speed (m/s) that counts as a full-power shot.")]
-    public float maxSwipeSpeed = 8f;
-    [Tooltip("How much speed towards the net adds power (moving backwards removes it).")]
-    public float forwardWeight = 1f;
-    [Tooltip("How much sideways speed adds power.")]
-    public float sideWeight = 0.6f;
+    [Header("Power (the swipe towards the net sets how deep the ball goes)")]
+    [Tooltip("Speed towards the net (m/s) of a full-power swipe: the ball goes to the far end. Lower it to make deep shots easier (touch screens), raise it to demand faster swipes.")]
+    public float fullPowerSpeed = 6.5f;
+    [Tooltip("Below 1 the middle of the range is helped: a medium swipe already goes fairly deep. 1 = depth grows in a straight line with the swipe speed.")]
+    [Range(0.5f, 1.5f)] public float powerCurve = 0.85f;
+    [Tooltip("Moving away from the net faster than this (m/s) at the moment of contact: the ball is pushed into the net and dies there.")]
+    public float backwardNetSpeed = 1.2f;
+
+    [Header("Shot grades (speed towards the net, m/s, at the moment of contact: the same swipe that sets the depth)")]
+    [Tooltip("STRONG: a medium swipe. Gets the bigger burst, no word.")]
+    public float strongSwipeSpeed = 3.5f;
+    [Tooltip("GREAT SHOT: the word, the voice and the coin bonus. Needs a clearly fast swipe.")]
+    public float greatSwipeSpeed = 6f;
+    [Tooltip("PERFECT: the fastest swipes. Above Full Power Speed the depth no longer grows, but the grade still does.")]
+    public float perfectSwipeSpeed = 8.5f;
+    [Tooltip("Speed towards the net of the last shot (m/s); read by ShotFx to grade it.")]
+    public float LastSwipeSpeed { get; private set; }
 
     [Header("Shot")]
-    [Tooltip("Below this power (0-1) the swing is too small: the ball is pushed weakly into the net. Raise it to demand bigger movements.")]
-    [Range(0f, 1f)] public float minPowerForAimedShot = 0.4f;
-    [Tooltip("Ball speed (m/s) of a weak push towards the net.")]
+    [Tooltip("Ball speed (m/s) of the push that dies at the net.")]
     public float weakShotSpeed = 6f;
-    [Tooltip("Height (as a fraction of the net height) at which a weak push reaches the net.")]
+    [Tooltip("Height (as a fraction of the net height) at which that push reaches the net.")]
     [Range(0.1f, 0.95f)] public float weakNetHeightFraction = 0.55f;
     [Tooltip("Flight time of the gentlest aimed shot (seconds, before the ball speed multiplier).")]
     public float slowFlight = 1.3f;
@@ -33,6 +41,8 @@ public class PlayerRacketController : RacketController
     public float shortDepth = 1.5f;
     [Tooltip("Within this distance of the net, a hit with the racket almost still is a drop shot: high and short over the net.")]
     public float dropShotDistance = 2.5f;
+    [Tooltip("Power (0-1) below which a hit that close to the net is a drop shot.")]
+    [Range(0f, 0.5f)] public float dropShotMaxPower = 0.15f;
     [Tooltip("Where the drop shot lands, measured from the net on the opponent's side.")]
     public float dropShotDepth = 1.3f;
     [Tooltip("Flight time of the drop shot; longer means a higher arc.")]
@@ -96,31 +106,22 @@ public class PlayerRacketController : RacketController
         Racket.MoveTo(hit);
     }
 
-    // Any shot above the minimum power lands inside the opponent's court; only a weak touch can fail.
+    // Depth comes from the swipe towards the net (sideways only aims it): a still or gentle racket drops the ball short over the net, a faster
+    // one sends it deeper, a full-speed one to the far end. A racket moving away from the net pushes the ball into it.
     public override Vector3 ComputeShot(GameManager gm, Vector3 contact)
     {
         float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
-        float speedScore = forwardSpeed * forwardWeight + Mathf.Abs(sideSpeed) * sideWeight;
-        float power = Mathf.Clamp01(speedScore / maxSwipeSpeed);
+        LastSwipeSpeed = forwardSpeed;
         float dx = contact.x - Racket.HitCenter.x; // off-centre hit, measured where the racket met the ball
 
         Court court = gm.Court;
         float maxX = court.halfWidth - landMargin;
         float maxDepth = court.halfLength - landMargin;
         float landX = Mathf.Clamp(sideSpeed * sideSwipeFactor - dx * offCentreFactor, -maxX, maxX);
-        // Power above the minimum is remapped to 0-1 for depth and speed.
-        float aimed = Mathf.Clamp01((power - minPowerForAimedShot) / (1f - minPowerForAimedShot));
-        float landZ = -Racket.SideSign * (shortDepth + (maxDepth - shortDepth) * aimed);
 
-        if (power < minPowerForAimedShot && Mathf.Abs(contact.z) <= dropShotDistance)
+        if (forwardSpeed < -backwardNetSpeed)
         {
-            float dropX = Mathf.Clamp(landX, -maxX, maxX);
-            return gm.Ball.SolveHit(contact, dropX, -Racket.SideSign * dropShotDepth, court.groundY + gm.Ball.radius, dropShotFlight, gm.Net);
-        }
-
-        if (power < minPowerForAimedShot)
-        {
-            // Too small a movement: the ball only reaches the net, hits it and drops on this side.
+            // Swinging backwards: the ball only reaches the net, hits it and drops on this side.
             float netZ = -Racket.SideSign * 0.1f;
             float dist = Mathf.Max(0.5f, Mathf.Abs(netZ - contact.z));
             float tn = dist / weakShotSpeed;
@@ -129,7 +130,14 @@ public class PlayerRacketController : RacketController
             return new Vector3((landX - contact.x) / tn * 0.3f, (targetY - contact.y) / tn + 0.5f * g * tn, (netZ - contact.z) / tn);
         }
 
-        float t = Mathf.Lerp(slowFlight, fastFlight, aimed);
+        float power = Mathf.Pow(Mathf.Clamp01(forwardSpeed / Mathf.Max(0.1f, fullPowerSpeed)), powerCurve);
+        if (power <= dropShotMaxPower && Mathf.Abs(contact.z) <= dropShotDistance)
+        {
+            float dropX = Mathf.Clamp(landX, -maxX, maxX);
+            return gm.Ball.SolveHit(contact, dropX, -Racket.SideSign * dropShotDepth, court.groundY + gm.Ball.radius, dropShotFlight, gm.Net);
+        }
+        float landZ = -Racket.SideSign * (shortDepth + (maxDepth - shortDepth) * power);
+        float t = Mathf.Lerp(slowFlight, fastFlight, power);
         return gm.Ball.SolveHit(contact, landX, landZ, court.groundY + gm.Ball.radius, t, gm.Net);
     }
 

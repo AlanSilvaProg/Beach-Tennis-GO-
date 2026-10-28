@@ -636,7 +636,7 @@ public class GameManager : MonoBehaviour
         var quality = ShotQuality.Normal;
         if (shotFx != null)
         {
-            quality = state == State.Serving ? ShotQuality.Normal : shotFx.Evaluate(ball, court, contact, ball.Velocity);
+            quality = state == State.Serving ? ShotQuality.Normal : shotFx.Evaluate(ball, court, contact, ball.Velocity, ctrl as PlayerRacketController);
             float speed = ball.Velocity.magnitude;
             shotFx.Hit(contact, quality, speed, ball.Velocity, side == 0);
             ctrl.Racket.Punch(shotFx.Power(speed));

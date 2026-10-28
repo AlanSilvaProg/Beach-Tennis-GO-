@@ -112,16 +112,19 @@ MonoBehaviour:
   cam: {fileID: 0}
   restPosition: {x: 0, y: 1, z: -4.8}
   pointerLift: 0.087
-  maxSwipeSpeed: 8
-  forwardWeight: 1
-  sideWeight: 0.6
-  minPowerForAimedShot: 0.4
+  fullPowerSpeed: 50
+  powerCurve: 0.85
+  backwardNetSpeed: 1.2
+  strongSwipeSpeed: 40
+  greatSwipeSpeed: 60
+  perfectSwipeSpeed: 80
   weakShotSpeed: 6
   weakNetHeightFraction: 0.55
   slowFlight: 1.3
   fastFlight: 0.5
   shortDepth: 1.5
   dropShotDistance: 2.5
+  dropShotMaxPower: 0.15
   dropShotDepth: 1.3
   dropShotFlight: 1.6
   sideSwipeFactor: 0.5

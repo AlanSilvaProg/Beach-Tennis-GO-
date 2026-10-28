@@ -5839,6 +5839,7 @@ MonoBehaviour:
   cameraRig: {fileID: 1347760171}
   hud: {fileID: 64010825}
   announcer: {fileID: 937326119}
+  shotFx: {fileID: 0}
   poki: {fileID: 1795470236}
   menu: {fileID: 1564390877}
   confetti: {fileID: 29024199}
@@ -9167,7 +9168,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Aspect: 0.5625
+    - _Aspect: 1.3339844
     - _DashSpeed: 1
     - _MidRadius: 0.42
     - _RayStrength: 0.08
@@ -10647,7 +10648,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.4
+  m_fontSize: 60
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -11882,6 +11883,10 @@ PrefabInstance:
     - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: hitRadius
       value: 0.85
+      objectReference: {fileID: 0}
+    - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
+      propertyPath: ballLeanFar
+      value: 50
       objectReference: {fileID: 0}
     - target: {fileID: 7515083952364050911, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: cam
@@ -17276,6 +17281,7 @@ MonoBehaviour:
   shotCallChance: 0.8
   shotCallCooldown: 1.5
   callCpuShots: 1
+  praiseCooldown: 1
   logShots: 0
   smashMinAbove: 0.5
   smashMaxRise: 1.5
@@ -17782,7 +17788,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 29.1
+  m_fontSize: 32
   m_fontSizeBase: 32
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -22541,7 +22547,7 @@ Transform:
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
   m_LocalRotation: {x: 0.15212339, y: 0, z: 0, w: 0.98836154}
-  m_LocalPosition: {x: 0, y: 7.0497594, z: -21.168686}
+  m_LocalPosition: {x: 0, y: 6.5622787, z: -19.622593}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

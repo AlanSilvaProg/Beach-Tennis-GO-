@@ -12,7 +12,7 @@ public enum ShotQuality { Weak, Normal, Strong, VeryGood, Perfect }
 // crosses the court to the far end.
 public class ShotFx : MonoBehaviour
 {
-    [Header("Quality (ball speed after the hit, game units; the player swipes give about 8 to 11, the CPU can be faster: turn on logShots to tune)")]
+    [Header("CPU shot grades only (ball speed after the hit). The player's shots are graded by the swipe: see PlayerRacketController, Shot grades)")]
     public float strongSpeed = 9.2f;
     public float veryGoodSpeed = 9.8f;
     public float perfectSpeed = 10.4f;
@@ -137,8 +137,21 @@ public class ShotFx : MonoBehaviour
     // 0 = the softest hit, 1 = the strongest.
     public float Power(float speed) { return Mathf.Clamp01((speed - 6f) / (perfectSpeed + 0.4f - 6f)); }
 
-    public ShotQuality Evaluate(Ball ball, Court court, Vector3 contact, Vector3 outgoing)
+    // `player` is the human's controller: its shots are graded by how fast the swipe was (the thresholds are on the controller, in the Inspector).
+    // Without it (the CPU) the grade comes from the ball speed and depth below.
+    public ShotQuality Evaluate(Ball ball, Court court, Vector3 contact, Vector3 outgoing, PlayerRacketController player = null)
     {
+        if (player != null)
+        {
+            Vector2 l = ShotAnnouncer.Landing(ball, court, contact, outgoing);
+            bool inCourt = Mathf.Abs(l.x) <= court.halfWidth && Mathf.Abs(l.y) <= court.halfLength;
+            float s = player.LastSwipeSpeed;
+            if (logShots) Debug.Log($"[ShotFx] swipe {s:F1} m/s land x {l.x:F1} z {l.y:F1} inside {inCourt}");
+            if (inCourt && s >= player.perfectSwipeSpeed) return ShotQuality.Perfect;
+            if (inCourt && s >= player.greatSwipeSpeed) return ShotQuality.VeryGood;
+            if (s >= player.strongSwipeSpeed) return ShotQuality.Strong;
+            return s >= 0.8f ? ShotQuality.Normal : ShotQuality.Weak;
+        }
         float speed = outgoing.magnitude;
         Vector2 land = ShotAnnouncer.Landing(ball, court, contact, outgoing);
         bool inside = Mathf.Abs(land.x) <= court.halfWidth && Mathf.Abs(land.y) <= court.halfLength;
