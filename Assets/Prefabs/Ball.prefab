@@ -484,6 +484,10 @@ MonoBehaviour:
   radius: 0.15
   gravity: 9.81
   maxDistance: 40
+  bouncy: 0
+  restitution: 0.6
+  friction: 0.7
+  settleSpeed: 1.2
   body: {fileID: 8440881724397484169}
   shadow: {fileID: 276329238695968507}
   shadowSize: 0.4
