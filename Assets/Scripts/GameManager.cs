@@ -272,13 +272,11 @@ public class GameManager : MonoBehaviour
         var music = FindFirstObjectByType<MusicPlayer>();
         if (music != null) { var src = music.GetComponent<AudioSource>(); if (src != null) src.ignoreListenerPause = true; }
         if (poki != null) { if (paused) poki.GameplayStop(); else poki.GameplayStart(); }
-        PokiEvents.Track("pause", paused ? "open" : "resume", "level", level);
     }
 
     // The EXIT GAME button of the pause window: the match is left and the menu comes back.
     public void ExitToMenu()
     {
-        PokiEvents.Track("pause", "exit", "level", level);
         SetPaused(false);
         ReturnToMenu();
     }

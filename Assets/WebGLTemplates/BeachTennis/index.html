@@ -55,9 +55,7 @@
           var s = sdk();
           if (!s) { resolve(false); return; }
           try { if (isLocalHost()) s.setDebug(true); } catch (e) { }   // local tests only: SDK logs and simulated ads
-          // Resolves true whether init worked or failed (ad blocker, network): the Poki loader queues the calls and sends them after init
-          // either way, so gameplay / loading events must not be skipped because init failed.
-          Promise.resolve(s.init()).then(function () { resolve(true); }, function () { resolve(true); });
+          Promise.resolve(s.init()).then(function () { resolve(true); }, function () { resolve(false); }); // ad blocker etc.: carry on
         });
         // The SDK may take long or never answer: never keep the game waiting more than this.
         function initOrTimeout(ms) {
@@ -86,8 +84,7 @@
           var target = wanted && !hidden && !adRunning;
           if (target === sent) return;
           sent = target;
-          chain = chain.then(function () { return initOrTimeout(4000); }).then(function () {
-            var ok = !!sdk();
+          chain = chain.then(function () { return initPromise; }).then(function (ok) {
             if (!ok) return;
             try { if (target) sdk().gameplayStart(); else sdk().gameplayStop(); } catch (e) { }
           });
@@ -106,8 +103,8 @@
         window.addEventListener("wheel", function (e) { e.preventDefault(); }, { passive: false });
 
         return {
-          loadingStart: function () { try { if (sdk()) sdk().gameLoadingStart(); } catch (e) { } },
-          loadingFinished: function () { initOrTimeout(4000).then(function () { try { if (sdk()) sdk().gameLoadingFinished(); } catch (e) { } }); },
+          loadingStart: function () { initPromise.then(function (ok) { if (ok) try { sdk().gameLoadingStart(); } catch (e) { } }); },
+          loadingFinished: function () { initPromise.then(function (ok) { if (ok) try { sdk().gameLoadingFinished(); } catch (e) { } }); },
           gameplayStart: function () { wanted = true; sync(); },
           gameplayStop: function () { wanted = false; sync(); },
           // Ad before heading back into gameplay. Tells the game with "OnAdStarted" (mute) and "OnBreakFinished" (always, exactly once).
