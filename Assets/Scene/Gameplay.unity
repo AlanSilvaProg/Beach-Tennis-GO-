@@ -11877,12 +11877,16 @@ PrefabInstance:
       value: PlayerRacket
       objectReference: {fileID: 0}
     - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
+      propertyPath: height
+      value: 0.76
+      objectReference: {fileID: 0}
+    - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: hitHeight
-      value: 1
+      value: 1.3
       objectReference: {fileID: 0}
     - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: hitRadius
-      value: 0.85
+      value: 1.09
       objectReference: {fileID: 0}
     - target: {fileID: 6888458869779345270, guid: beddc35a58f5e45a6a8c80f43ffc488e, type: 3}
       propertyPath: ballLeanFar
