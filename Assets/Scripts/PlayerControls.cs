@@ -80,18 +80,35 @@ public class PlayerControls : MonoBehaviour
     // The swing was asked for since the last time this was read.
     public bool ConsumeSwing()
     {
+        if (!swingInput) { swingQueued = false; return false; }
         bool s = swingQueued || (visible && (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.J)));
         swingQueued = false;
         return s;
     }
+
+    // The racket swings by itself (the player only moves), so there is no swing button and a click or a tap does not hit. Turn it on to bring the button back.
+    public bool swingInput = false;
 
     public void SetVisible(bool v)
     {
         if (ForceMobile) v = true;
         if (visible == v) return;
         visible = v;
-        if (root != null) root.gameObject.SetActive(v);
-        if (!v) { stickPointer = int.MinValue; stickValue = Vector2.zero; Move = Vector2.zero; swingQueued = false; }
+        // The controls are never switched off (that would drop a finger that is still on the stick: it would have to touch again): they are only
+        // hidden, and while they are, the stick is ignored. A finger that stays down goes on moving the character afterwards.
+        ApplyVisibility();
+        if (!v) swingQueued = false;
+    }
+
+    CanvasGroup group;
+    void ApplyVisibility()
+    {
+        if (root == null) return;
+        if (group == null && !root.TryGetComponent(out group)) group = root.gameObject.AddComponent<CanvasGroup>();
+        group.alpha = visible ? 1f : 0f;
+        // Hidden controls must not catch touches or clicks (the menu's own taps).
+        if (stickPad != null) stickPad.GetComponent<Image>().raycastTarget = visible;
+        if (swingPad != null) swingPad.GetComponent<Image>().raycastTarget = visible;
     }
 
     void Build(TMP_FontAsset font, Material fontMaterial)
@@ -151,17 +168,19 @@ public class PlayerControls : MonoBehaviour
         ShowStickAt(restingPlace, false);
         mobile = Application.isMobilePlatform || ForceMobile;
         ApplyLayout();
-        root.gameObject.SetActive(false);
+        ApplyVisibility();
     }
 
     // The phone layout draws the stick and the button and splits the screen in two; the computer layout draws nothing and any click is a swing.
     void ApplyLayout()
     {
         stickBase.gameObject.SetActive(mobile);
-        button.gameObject.SetActive(mobile);
+        button.gameObject.SetActive(mobile && swingInput);
         stickPad.gameObject.SetActive(mobile);
+        swingPad.gameObject.SetActive(swingInput);
         SetArea(swingPad, mobile ? new Vector2(1f - swingArea.x, 0f) : Vector2.zero, mobile ? new Vector2(1f, swingArea.y) : Vector2.one);
-        SetArea(stickPad, Vector2.zero, new Vector2(stickArea.x, stickArea.y));
+        // without a swing button the stick can be started anywhere on the lower screen
+        SetArea(stickPad, Vector2.zero, new Vector2(swingInput ? stickArea.x : 1f, stickArea.y));
         if (!mobile) { stickPointer = int.MinValue; stickValue = Vector2.zero; }
     }
 
@@ -227,8 +246,7 @@ public class PlayerControls : MonoBehaviour
 
     void StickDown(PointerEventData e)
     {
-        if (stickPointer != int.MinValue) return;
-        stickPointer = e.pointerId;
+        stickPointer = e.pointerId; // a new touch always takes the stick over (a finger that was lost is not waited for)
         Vector2 p = ToCanvas(e.position);
         p.x = Mathf.Max(p.x, stickRadius + 20f);
         p.y = Mathf.Max(p.y, stickRadius + 20f);
@@ -253,6 +271,14 @@ public class PlayerControls : MonoBehaviour
         ShowStickAt(restingPlace, false);
     }
 
+    bool HeldPointerAlive()
+    {
+        if (stickPointer == -1) return Input.GetMouseButton(0);      // the mouse (left button)
+        if (stickPointer < 0) return true;                           // other mouse buttons: not tracked
+        for (int i = 0; i < Input.touchCount; i++) if (Input.GetTouch(i).fingerId == stickPointer) return true;
+        return false;
+    }
+
     void SwingDown() { if (visible) { swingQueued = true; pressGlow = 1f; } }
 
     void Update()
@@ -275,6 +301,14 @@ public class PlayerControls : MonoBehaviour
             v = m < deadZone ? Vector2.zero : v / m * Mathf.Clamp01((m - deadZone) / (1f - deadZone));
         }
         Move = visible ? v : Vector2.zero;
+
+        // The finger that holds the stick is still down? (If its release was lost, the stick lets go by itself.)
+        if (stickPointer != int.MinValue && !HeldPointerAlive())
+        {
+            stickPointer = int.MinValue;
+            stickValue = Vector2.zero;
+            ShowStickAt(restingPlace, false);
+        }
 
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.J)) pressGlow = 1f;
         pressGlow = Mathf.MoveTowards(pressGlow, 0f, Time.unscaledDeltaTime * 4f);

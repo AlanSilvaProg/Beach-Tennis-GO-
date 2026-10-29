@@ -173,6 +173,7 @@ public class AiRacketController : RacketController
         time = 0f;
         bool found = false;
         Vector3 first = p;
+        int bounced = gm.Bounces;          // touches of the sand since the last hit
 
         for (float t = 0f; t < predictTime; t += dt)
         {
@@ -200,7 +201,14 @@ public class AiRacketController : RacketController
 
             if (landed)
             {
-                if (letOutBallsGo && OutOfCourt(court, p)) return false;
+                bounced++;
+                if (ball.bouncy && bounced == 1 && p.z * side > 0f && !(letOutBallsGo && OutOfCourt(court, p)))
+                {
+                    // a good first bounce on this side: the ball goes on and can still be hit; follow it to its next bounce
+                    v = new Vector3(v.x * ball.friction, -v.y * ball.restitution, v.z * ball.friction);
+                    if (v.y > ball.settleSpeed * 0.2f) continue;
+                }
+                if (bounced <= 1 && letOutBallsGo && OutOfCourt(court, p)) return false;
                 if (!found) { point = p; time = t; }
                 return true;
             }

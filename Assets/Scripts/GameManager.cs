@@ -116,6 +116,11 @@ public class GameManager : MonoBehaviour
     [Tooltip("The serve is hit when the racket is this close to the ball (m) or has passed its closest point, so the full speed and direction of the swipe are measured.")]
     public float serveContactRadius = 0.12f;
 
+    [Header("Bounce (offline matches)")]
+    [Tooltip("How much of its vertical / horizontal speed the ball keeps when it bounces on the sand. The lower the horizontal one, the more time the receiver has to get to the ball after its bounce.")]
+    [Range(0.2f, 0.95f)] public float bounceRestitution = 0.6f;
+    [Range(0.3f, 1f)] public float bounceFriction = 0.65f;
+
     [Header("Simulation")]
     [Tooltip("Multiplies how fast the ball travels. Arcs stay the same, the ball just gets there sooner.")]
     public float ballSpeed = 1.6f;
@@ -126,6 +131,7 @@ public class GameManager : MonoBehaviour
 
     State state = State.Menu;
     float stateTimer;
+    int bounces;                   // times the ball has touched the sand since the last hit
     int level;
     int playerScore, aiScore;
     int playerSets, aiSets;
@@ -186,6 +192,12 @@ public class GameManager : MonoBehaviour
     // The AI may swing at its serve (a short moment after the ball is set up).
     public bool AiServeReady => AiServing && stateTimer > serveDelay;
     public bool Online => onlineScene;
+    // Offline matches: the ball bounces and a point needs it to bounce twice (see ResolveBounce). Online keeps the first-landing rule.
+    public bool BouncyRules => !onlineScene;
+    // Times the ball has touched the sand since the last hit.
+    public int Bounces => bounces;
+    // Seconds the game has been in this state (the serve waits for the player this long before it is hit by itself).
+    public float StateTime => stateTimer;
 
     void Awake()
     {
@@ -221,6 +233,7 @@ public class GameManager : MonoBehaviour
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
+        if (BouncyRules) { ball.bouncy = true; ball.restitution = bounceRestitution; ball.friction = bounceFriction; }
         EnsureOpponentBody(opponent);
         ResetRackets();
         ball.SetVisible(false);
@@ -580,6 +593,7 @@ public class GameManager : MonoBehaviour
     {
         float z = (server == 0 ? -1f : 1f) * (court.halfLength - serveBaselineOffset);
         serveArmed = false;
+        bounces = 0;
         servePrevDz = float.NaN;
         float serveX = server == 0 ? player.Racket.Position.x : Role == NetRole.Host ? opponent.Racket.Position.x : Random.Range(-serveBallSpread, serveBallSpread);
         ball.Place(new Vector3(serveX,
@@ -693,9 +707,14 @@ public class GameManager : MonoBehaviour
         if (landed) PlayLanding(fall);
         if (!rules) return;
 
-        if (landed) { ResolveLanding(); return; }
+        if (landed)
+        {
+            if (BouncyRules) { if (ResolveBounce()) return; }
+            else { ResolveLanding(); return; }
+        }
+        if (state != State.Rally) return;
 
-        // Rackets hit the ball when it is within reach and flying towards them.
+        // Rackets hit the ball when it is within reach and flying towards them (before or after its bounce).
         if (lastHitter != 0 && ball.Velocity.z < 0f) CheckRacket(0, player);
         if (state == State.Rally && lastHitter != 1 && ball.Velocity.z > 0f) CheckRacket(1, opponent);
 
@@ -717,6 +736,7 @@ public class GameManager : MonoBehaviour
         OpponentSwing(ctrl);
         lastHitter = side;
         hitsInPoint++;
+        bounces = 0;
         rallyTime = 0f; // the timeout counts from the last hit, not from the serve (a long rally is not a stuck ball)
         PlayHit(side, ball.Velocity.magnitude);
         var quality = ShotQuality.Normal;
@@ -777,6 +797,26 @@ public class GameManager : MonoBehaviour
 
     // ---------- rules ----------
     // The hitter scores only if the ball lands inside the opponent's half of the court.
+    // Offline rules, like tennis. The first touch of the sand has to be inside the opponent's half (otherwise the hitter loses the point); the ball
+    // then goes on and the receiver may hit it, before or after it bounces again; a SECOND bounce that nobody has hit is the hitter's point.
+    // Returns true when the point was decided.
+    bool ResolveBounce()
+    {
+        bounces++;
+        if (bounces == 1)
+        {
+            int landSide = ball.Position.z < 0f ? 0 : 1;
+            bool inside = court.Contains(ball.Position);
+            if (inside && landSide != lastHitter) return false;      // a good ball: the rally goes on
+            if (announcer != null && !inside) announcer.Say(ShotAnnouncer.Call.Out);
+            Score(1 - lastHitter);
+            return true;
+        }
+        if (announcer != null && hitsInPoint == 1) announcer.Say(ShotAnnouncer.Call.Ace);   // a serve nobody touched
+        Score(lastHitter);
+        return true;
+    }
+
     void ResolveLanding()
     {
         int landSide = ball.Position.z < 0f ? 0 : 1;

@@ -2,8 +2,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// The controls of a computer, very small, always on the screen during a match: W A S D drawn as little keys with MOVE, and a little mouse with its left button
-// marked with HIT. They sit at the top right, just under the button of the settings (the pause button in a match). Not shown on a phone (it has its own stick
+// The controls of a computer, very small, always on the screen during a match: W A S D drawn as little keys with MOVE (the racket hits by itself, so there
+// is nothing else to press). They sit at the top right, just under the button of the settings (the pause button in a match). Not shown on a phone (it has its own stick
 // and button). Made at run time inside the HUD canvas, next to the sound button, so the sizes are those of the other HUD buttons.
 public class ControlsLegend : MonoBehaviour
 {
@@ -76,7 +76,7 @@ public class ControlsLegend : MonoBehaviour
         // The panel behind everything (drawn first): from the left of the words to the right of the pictures, with a little room all round.
         float labelRoom = 40f;
         float panelW = clusterW + 6f + labelRoom + panelPadding.x * 2f - 2f;
-        float panelH = clusterH + 7f + 24f + panelPadding.y * 2f - 4f;
+        float panelH = clusterH + panelPadding.y * 2f - 2f;
         var panel = Img("Panel", root, rounded, panelColor, new Vector2(panelPadding.x, panelPadding.y), new Vector2(panelW, panelH), new Vector2(1f, 1f));
         panel.type = Image.Type.Sliced;
 
@@ -86,15 +86,6 @@ public class ControlsLegend : MonoBehaviour
         Key("S", new Vector2(-(k + g), -(k + g)), k);
         Key("D", new Vector2(0f, -(k + g)), k);
         Label(I18n.Tr("MOVE"), new Vector2(-clusterW - 6f, -clusterH * 0.5f));
-
-        // HIT: a mouse with its left button marked
-        float mouseTop = -clusterH - 7f, mw = 16f, mh = 24f;
-        var body = Img("MouseBody", root, rounded, keyColor, new Vector2(0f, mouseTop), new Vector2(mw, mh), new Vector2(1f, 1f));
-        body.type = Image.Type.Sliced;
-        // the left button is the left half of the mouse's top
-        var left = Img("MouseLeft", root, rounded, highlight, new Vector2(-mw * 0.5f, mouseTop - 1f), new Vector2(mw * 0.5f - 1f, mh * 0.45f), new Vector2(1f, 1f));
-        left.type = Image.Type.Sliced;
-        Label(I18n.Tr("HIT"), new Vector2(-mw - 6f, mouseTop - mh * 0.5f));
     }
 
     void Key(string letter, Vector2 pos, float size)

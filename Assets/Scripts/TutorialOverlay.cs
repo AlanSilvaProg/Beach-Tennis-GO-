@@ -141,13 +141,11 @@ public class TutorialOverlay : MonoBehaviour
         knob = pulseButton = null;
         Vector2 size = root.rect.size;
         bool wide = size.x > size.y * 1.15f;
-        // Two groups: MOVE and HIT. Side by side on a wide screen, one over the other on a tall one.
-        Vector2 moveAt = wide ? new Vector2(-size.x * 0.22f, 20f) : new Vector2(0f, size.y * 0.2f);
-        Vector2 hitAt = wide ? new Vector2(size.x * 0.22f, 20f) : new Vector2(0f, -size.y * 0.17f);
-        if (mobile) { if (!wide) { moveAt = new Vector2(-size.x * 0.24f, 0f); hitAt = new Vector2(size.x * 0.24f, 0f); } }
-
-        if (mobile) { BuildStick(moveAt); BuildButton(hitAt); }
-        else { BuildKeys(moveAt); BuildMouse(hitAt); }
+        // Only the movement: the racket hits by itself when the ball is in reach.
+        Vector2 moveAt = new Vector2(0f, size.y * 0.02f);
+        if (mobile) BuildStick(moveAt); else BuildKeys(moveAt);
+        var auto = Text("Auto", content, I18n.Tr("THE RACKET HITS BY ITSELF"), 54, moveAt + new Vector2(0f, -330f), new Vector2(1500f, 90f));
+        auto.color = highlight;
 
         hint = Text("Hint", content, mobile ? I18n.Tr("TAP TO START") : I18n.Tr("CLICK TO START"), 46, new Vector2(0f, -size.y * 0.42f), new Vector2(1200f, 80f));
         hint.color = new Color(1f, 1f, 1f, 0.8f);

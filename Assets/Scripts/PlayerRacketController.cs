@@ -52,6 +52,19 @@ public class PlayerRacketController : RacketController
     [Tooltip("A ball that would land less than this far past the net (m) is not a shot that crosses: it hits the net instead.")]
     public float minClearance = 0.7f;
 
+    [Header("Automatic hit (the player only moves)")]
+    [Tooltip("The racket swings by itself when the ball is in reach. Chance (relative weights) of a weak / medium / strong shot, drawn at every hit.")]
+    public Vector3 autoTierWeights = new Vector3(1f, 2f, 1f);
+    [Tooltip("Power (0-1) of each of the three shots; a weak shot is never weaker than what it takes to cross the net from where the player stands.")]
+    public Vector3 autoTierPower = new Vector3(0.35f, 0.65f, 1f);
+    [Tooltip("Sideways aim of an automatic shot: a random share (0-1) of the court's width either way; the way the player is running leans it a little further.")]
+    [Range(0f, 1f)] public float autoAimSpread = 0.6f;
+    [Range(0f, 1f)] public float autoAimLean = 0.3f;
+    [Tooltip("The serve is hit by itself this many seconds after the ball is set up (time to take a place first).")]
+    public float autoServeDelay = 1.3f;
+    [Tooltip("The swing starts when the ball is this many seconds of its flight from being in reach.")]
+    public float autoSwingLead = 0.08f;
+
     [Header("Serve")]
     [Tooltip("A serve is never a net or a short ball: whatever the swipe, it has at least this power (0-1). 0.5 is a medium ball, 1 the deepest.")]
     [Range(0f, 1f)] public float serveMinPower = 0.5f;
@@ -112,6 +125,7 @@ public class PlayerRacketController : RacketController
     PlayerControls controls;
     Vector3 feet, runVelocity;
     protected float swingStart = -10f;
+    protected int swingFrame;
     protected bool swingOpen;
     float lastTick = -10f;
     // The character started a swing, with the stick as it was (the other player's copy of this racket is told).
@@ -127,7 +141,8 @@ public class PlayerRacketController : RacketController
         {
             if (!UsesButton) return true;
             float t = Time.time - swingStart;
-            return swingOpen && t >= contactWindow.x && t <= contactWindow.y;
+            // A slow frame (a hitch) must not make the hit miss: for the first frames after the swing the end of the window does not count.
+            return swingOpen && t >= contactWindow.x && (t <= contactWindow.y || Time.frameCount - swingFrame <= 2);
         }
     }
     // The stick the shot is read from.
@@ -177,7 +192,6 @@ public class PlayerRacketController : RacketController
             character.Place(feet);
             character.SnapFacing();
             character.LookAt(Vector3.zero, false);
-            if (controls != null) controls.SetVisible(false);
         }
     }
 
@@ -217,16 +231,46 @@ public class PlayerRacketController : RacketController
         bool ballOn = gm.Ball != null && gm.Ball.gameObject.activeInHierarchy && gm.MatchOn;
         character.LookAt(gm.Ball != null ? gm.Ball.Position : Vector3.zero, ballOn);
 
-        // The swing button.
-        if (controls.ConsumeSwing() && Time.time - swingStart >= swingCooldown)
+        // The racket swings by itself when the ball is in reach (there is no swing button: the player only moves).
+        if (Time.time - swingStart >= swingCooldown && AutoSwingNow(gm)) StartAutoSwing(gm, m);
+        if (swingOpen && Time.time - swingStart > contactWindow.y && Time.frameCount - swingFrame > 2) swingOpen = false;
+    }
+
+    // The ball is about to be in reach (or it is the serve and the time has come): swing.
+    bool AutoSwingNow(GameManager gm)
+    {
+        Ball ball = gm.Ball;
+        if (gm.PlayerServing)
         {
-            swingStart = Time.time;
-            swingOpen = true;
-            stickAtPress = controls.Move;
-            character.Swing();
-            SwingStarted?.Invoke(stickAtPress);
+            float lo = ball.Position.z - serveStand.y, hi = ball.Position.z - serveStand.x, z = Racket.Position.z;
+            return gm.StateTime >= autoServeDelay && z >= lo - 0.1f && z <= hi + 0.1f;
         }
-        if (swingOpen && Time.time - swingStart > contactWindow.y) swingOpen = false;
+        if (gm.CurrentState != GameManager.State.Rally || ball.Grounded || gm.AiShouldChase) return false;
+        if (ball.Velocity.z * Racket.SideSign <= 0f) return false;            // not coming to this side
+        if (ball.Position.y > Racket.MaxHitY + 0.2f) return false;            // too high to reach
+        Vector2 d = new Vector2(ball.Position.x - Racket.Position.x, ball.Position.z - Racket.Position.z);
+        float lead = new Vector2(ball.Velocity.x, ball.Velocity.z).magnitude * gm.BallSpeed * autoSwingLead;
+        return d.magnitude <= Racket.hitRadius + lead;
+    }
+
+    // Weak, medium or strong, at random; aimed a little to either side at random.
+    void StartAutoSwing(GameManager gm, Vector2 running)
+    {
+        float total = autoTierWeights.x + autoTierWeights.y + autoTierWeights.z;
+        float r = Random.value * Mathf.Max(0.001f, total);
+        float power = r < autoTierWeights.x ? autoTierPower.x : r < autoTierWeights.x + autoTierWeights.y ? autoTierPower.y : autoTierPower.z;
+        // never weaker than what it takes to get over the net from here
+        float fromNet = Mathf.Abs(Racket.Position.z);
+        float crossing = Mathf.Clamp01((fromNet + minClearance - stillReach) / Mathf.Max(0.1f, fullReach - stillReach)) + 0.05f;
+        power = Mathf.Clamp01(Mathf.Max(power, crossing));
+        float y = Mathf.Clamp((power - stickPower.x) / Mathf.Max(0.01f, stickPower.y - stickPower.x) * 2f - 1f, -1f, 1f);
+        float x = Mathf.Clamp(Random.Range(-autoAimSpread, autoAimSpread) + autoAimLean * running.x, -1f, 1f);
+        stickAtPress = new Vector2(x, y);
+        swingStart = Time.time;
+        swingFrame = Time.frameCount;
+        swingOpen = true;
+        character.Swing();
+        SwingStarted?.Invoke(stickAtPress);
     }
 
     public override void Tick(GameManager gm)

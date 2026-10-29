@@ -9,6 +9,16 @@ public class Ball : MonoBehaviour
     [Tooltip("The ball is out of play when it flies this far from the court centre.")]
     public float maxDistance = 40f;
 
+    [Header("Bounce")]
+    [Tooltip("The ball bounces on the sand instead of stopping (set by the GameManager in an offline match).")]
+    public bool bouncy;
+    [Tooltip("Vertical speed kept after a bounce.")]
+    [Range(0.2f, 0.95f)] public float restitution = 0.6f;
+    [Tooltip("Horizontal speed kept after a bounce.")]
+    [Range(0.3f, 1f)] public float friction = 0.7f;
+    [Tooltip("A bounce whose impact is slower than this (m/s) is the last one: the ball stops.")]
+    public float settleSpeed = 1.2f;
+
     [Header("Visual")]
     [Tooltip("Child holding the ball mesh; scaled to the radius.")]
     public Transform body;
@@ -76,6 +86,11 @@ public class Ball : MonoBehaviour
         if (Position.y - radius <= court.groundY)
         {
             Position.y = court.groundY + radius;
+            if (bouncy && Velocity.y < -settleSpeed)
+            {
+                Velocity = new Vector3(Velocity.x * friction, -Velocity.y * restitution, Velocity.z * friction);
+                return true;   // a bounce: the ball is still in play
+            }
             Velocity = Vector3.zero;
             Grounded = true;
             return true;

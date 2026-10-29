@@ -239,7 +239,13 @@ public class ServeHint : MonoBehaviour
         if (game == null) return;
         // The character serves with its button: the hand shows the button instead of a swipe.
         bool buttonServe = game.player is PlayerRacketController pc && pc.UsesButton;
-        if (buttonServe) { UpdateButtonServeHint(); return; }
+        if (buttonServe)
+        {
+            // The racket serves by itself: there is nothing to teach.
+            if (ghost != null && ghost.gameObject.activeSelf) ghost.gameObject.SetActive(false);
+            if (hand != null && hand.gameObject.activeSelf) hand.gameObject.SetActive(false);
+            return;
+        }
         if (ghost == null) return;
         bool serving = game.PlayerServing && !PokiService.AdPlaying;
         if (!serving)
