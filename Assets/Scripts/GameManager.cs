@@ -638,10 +638,12 @@ public class GameManager : MonoBehaviour
         var quality = ShotQuality.Normal;
         if (shotFx != null)
         {
-            quality = state == State.Serving ? ShotQuality.Normal : shotFx.Evaluate(ball, court, contact, ball.Velocity, ctrl as PlayerRacketController);
+            // A human racket (ours or the other player's) is graded by its swipe; the CPU's always gets the plainest, white burst.
+            var human = ctrl as PlayerRacketController;
+            quality = human == null ? ShotQuality.Weak : state == State.Serving ? ShotQuality.Normal : shotFx.Evaluate(ball, court, contact, ball.Velocity, human);
             float speed = ball.Velocity.magnitude;
             shotFx.Hit(contact, quality, speed, ball.Velocity, side == 0);
-            ctrl.Racket.Punch(shotFx.Power(speed));
+            ctrl.Racket.Punch(human == null ? 0.2f : shotFx.Power(speed));
             if (side == 0)
             {
                 if (quality == ShotQuality.Perfect) stats.perfectShots++;
@@ -657,7 +659,7 @@ public class GameManager : MonoBehaviour
             EnterState(State.Rally);
         }
         if (side == 0) opponent.OnOpponentHit(this);
-        NetMessage?.Invoke(NetProtocol.EventHit(side, ball.Velocity.magnitude)); // the other player hears it too
+        NetMessage?.Invoke(NetProtocol.EventHit(side, ball.Velocity.magnitude, (int)quality)); // the other player hears it too
     }
 
     void Play(AudioClip clip, float volume, float pitch)
@@ -969,11 +971,23 @@ public class GameManager : MonoBehaviour
         UpdateHud();
     }
 
+    // Guest: the burst (and, for our own very good shots, the word, the voice and the bonus) of a hit the host reports.
+    void GuestHitFx(int side, float speed, ShotQuality quality)
+    {
+        if (shotFx == null) return;
+        shotFx.Hit(ball.Position, quality, speed, ball.Velocity, side == 0);
+        (side == 0 ? player : opponent).Racket.Punch(quality == ShotQuality.Weak ? 0.2f : shotFx.Power(speed));
+        if (side != 0) return;
+        if (quality == ShotQuality.Perfect) stats.perfectShots++;
+        else if (quality == ShotQuality.VeryGood) stats.greatShots++;
+        if (announcer != null && quality >= ShotQuality.VeryGood) announcer.Say(quality == ShotQuality.Perfect ? ShotAnnouncer.Call.Perfect : ShotAnnouncer.Call.VeryGood);
+    }
+
     // Guest: a hit or a cheer that the host reports (side 0 is the host, so 1 - side for this player).
     public void GuestEvent(string[] f)
     {
         if (!NetProtocol.ParseEvent(f, out char kind, out float a, out float b)) return;
-        if (kind == 'H') PlayHit(1 - (int)a, b);
+        if (kind == 'H') { PlayHit(1 - (int)a, b); GuestHitFx(1 - (int)a, b, (ShotQuality)NetProtocol.HitQuality(f)); }
         else if (kind == 'C') Bleachers.Cheer(a);
     }
 

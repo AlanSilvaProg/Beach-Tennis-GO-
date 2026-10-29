@@ -130,7 +130,14 @@ public static class NetProtocol
 
     // ---- events ----
 
-    public static string EventHit(int side, float speed) { return "E|H|" + side + "|" + F(speed); }
+    // `quality` is the ShotQuality of the hit (0-4), so the other screen shows the same burst; older clients ignore the extra field.
+    public static string EventHit(int side, float speed, int quality = 0) { return "E|H|" + side + "|" + F(speed) + "|" + quality; }
+
+    // The grade carried by a hit event (0 when it has none).
+    public static int HitQuality(string[] f)
+    {
+        try { return f.Length > 4 ? Mathf.Clamp(I(f[4]), 0, 4) : 0; } catch { return 0; }
+    }
     public static string EventLand(float impact) { return "E|L|" + F(impact); }
     public static string EventCheer(float value) { return "E|C|" + F(value); }
 

@@ -12,6 +12,13 @@ public class RemoteRacketController : PlayerRacketController
     Vector3 target;
     bool hasTarget;
 
+    // The other player's swings are judged by the same rules as ours (depth, reach, serve, grades), whatever this object was saved with.
+    void Start()
+    {
+        foreach (var c in FindObjectsByType<PlayerRacketController>(FindObjectsSortMode.None))
+            if (!(c is RemoteRacketController)) { CopyTuningFrom(c); break; }
+    }
+
     // x, z in the world of the screen this runs on.
     public void SetTarget(Vector2 xz)
     {

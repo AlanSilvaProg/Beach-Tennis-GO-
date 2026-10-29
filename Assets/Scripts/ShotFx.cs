@@ -28,11 +28,11 @@ public class ShotFx : MonoBehaviour
     public TMP_FontAsset font;
 
     // Per grade (Weak, Normal, Strong, VeryGood, Perfect): size as a fraction of maxBurstSize, colour and number of sparks.
-    static readonly float[] TierSize = { 0.2f, 0.36f, 0.55f, 0.78f, 1f };
+    static readonly float[] TierSize = { 0.27f, 0.45f, 0.64f, 0.84f, 1f };
     static readonly Color[] TierColor =
     {
         new Color(1f, 1f, 1f),            // white
-        new Color(0.72f, 0.9f, 1f),       // ice
+        new Color(0.55f, 0.85f, 1f),      // ice
         new Color(0.25f, 0.55f, 1f),      // blue
         new Color(0.7f, 0.4f, 1f),        // violet
         new Color(1f, 0.8f, 0.2f),        // gold
@@ -78,7 +78,7 @@ public class ShotFx : MonoBehaviour
         root = (RectTransform)go.transform;
 
         glow = MakeSprite(64, (x, y, r) => Mathf.Pow(Mathf.Clamp01(1f - r), 2f));
-        ring = MakeSprite(128, (x, y, r) => Mathf.Clamp01(1f - Mathf.Abs(r - 0.86f) / 0.1f));
+        ring = MakeSprite(128, (x, y, r) => Mathf.Clamp01(1f - Mathf.Abs(r - 0.84f) / 0.16f));
         star = MakeSprite(64, (x, y, r) =>
         {
             float ax = Mathf.Abs(x), ay = Mathf.Abs(y);
@@ -179,17 +179,17 @@ public class ShotFx : MonoBehaviour
         // Each grade has its own size, colour and amount of sparks: white and tiny for the softest, then ice, blue, violet, and gold for the perfect shot (full size).
         int g = (int)quality;
         float size = TierSize[g] * maxBurstSize;
-        Color hot = TierColor[g], light = Color.Lerp(hot, Color.white, 0.55f);
+        Color hot = TierColor[g], light = Color.Lerp(hot, Color.white, 0.3f);
         float spread = Mathf.Lerp(1.4f, 6.2f, g / 4f);
 
-        Spawn(0, at, Vector2.zero, size * 0.9f, 0.16f, 0f, hot);                         // flash
-        Spawn(1, at, Vector2.zero, size * 0.35f, 0.2f + g * 0.04f, size * 1.1f, light);  // shock ring
+        Spawn(0, at, Vector2.zero, size * 1.1f, 0.2f, 0f, hot);                         // flash
+        Spawn(1, at, Vector2.zero, size * 0.4f, 0.26f + g * 0.04f, size * 1.15f, g == 0 ? hot : light);  // shock ring
         for (int i = 0; i < TierSparks[g]; i++)
         {
             // Sparks fly mostly the way the ball goes, with a spread that opens for the big shots.
             float a = (Random.value - 0.5f) * spread + Mathf.Atan2(dir.y, dir.x);
             Vector2 v = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * Random.Range(0.5f, 1.25f) * size * Mathf.Lerp(1.4f, 2.4f, g / 4f);
-            Spawn(2, at, v, Random.Range(0.08f, 0.15f) * size + 5f, Random.Range(0.25f, 0.5f), 0f, Random.value < 0.4f ? light : hot);
+            Spawn(2, at, v, Random.Range(0.1f, 0.17f) * size + 8f, Random.Range(0.3f, 0.55f), 0f, Random.value < 0.4f ? light : hot);
         }
         if (g >= (int)ShotQuality.Strong)
         {
@@ -302,14 +302,14 @@ public class ShotFx : MonoBehaviour
             switch (p.kind)
             {
                 case 0:  // flash: shrinks and fades
-                    c.a *= 1f - k;
+                    c.a *= 1f - k * k;
                     p.rt.localScale = Vector3.one * (1f + k * 0.5f);
                     break;
                 case 1:  // ring: grows and thins out
                     {
                         float s = p.size + p.grow * (1f - (1f - k) * (1f - k));
                         p.rt.sizeDelta = new Vector2(s, s);
-                        c.a *= (1f - k) * 0.9f;
+                        c.a *= 1f - k * k;
                         break;
                     }
                 case 2:  // spark: a streak that flies off, slows down and shortens

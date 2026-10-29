@@ -66,6 +66,17 @@ public class PlayerRacketController : RacketController
     [Tooltip("Aimed shots land at least this far inside the lines.")]
     public float landMargin = 0.5f;
 
+    // Takes the tuning of another controller (the remote player's racket plays by the local player's numbers).
+    public void CopyTuningFrom(PlayerRacketController o)
+    {
+        fullPowerSpeed = o.fullPowerSpeed; powerCurve = o.powerCurve; backwardNetSpeed = o.backwardNetSpeed;
+        stillReach = o.stillReach; fullReach = o.fullReach; minClearance = o.minClearance;
+        serveMinPower = o.serveMinPower; strongSwipeSpeed = o.strongSwipeSpeed; greatSwipeSpeed = o.greatSwipeSpeed; perfectSwipeSpeed = o.perfectSwipeSpeed;
+        weakShotSpeed = o.weakShotSpeed; weakNetHeightFraction = o.weakNetHeightFraction; slowFlight = o.slowFlight; fastFlight = o.fastFlight;
+        shortDepth = o.shortDepth; dropShotDistance = o.dropShotDistance; dropShotMaxPower = o.dropShotMaxPower; dropShotDepth = o.dropShotDepth;
+        dropShotFlight = o.dropShotFlight; sideSwipeFactor = o.sideSwipeFactor; offCentreFactor = o.offCentreFactor; landMargin = o.landMargin;
+    }
+
     bool sawTouch;          // once a touch has been seen the mouse is ignored (a phone also reports an emulated mouse)
     bool havePointer;       // false until the pointer has been read since the last time it was lost
     Vector2 lastPointer;
