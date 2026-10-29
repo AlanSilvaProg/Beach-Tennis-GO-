@@ -66,6 +66,10 @@ public class PlayerRacketController : RacketController
     [Tooltip("Speed towards the net of the last shot (m/s); read by ShotFx to grade it.")]
     public float LastSwipeSpeed { get; private set; }
 
+    [Header("Baseline style (Training)")]
+    [Tooltip("Flight time (simulated seconds) of the ball from the racket to its bounce: lower = faster ball. The stick towards the net makes it up to 20% faster, away from the net up to 30% slower.")]
+    public float baselineFlight = 1.05f;
+
     [Header("Shot")]
     [Tooltip("Ball speed (m/s) of the push that dies at the net.")]
     public float weakShotSpeed = 6f;
@@ -194,10 +198,11 @@ public class PlayerRacketController : RacketController
         float dt = Time.deltaTime;
         float groundY = gm.Court.groundY;
         Vector2 m = controls.Move;
-        Vector3 wish = new Vector3(m.x, 0f, m.y) * moveSpeed;
+        bool baseline = gm.Baseline;   // along the baseline only: the stick's sideways part runs the player, nothing else
+        Vector3 wish = baseline ? new Vector3(m.x, 0f, 0f) * moveSpeed : new Vector3(m.x, 0f, m.y) * moveSpeed;
 
         // Serving: the racket stays just behind the ball. If it is not there yet (the last point ended elsewhere) it runs there by itself.
-        if (gm.PlayerServing)
+        if (gm.PlayerServing && !baseline)
         {
             float ballZ = gm.Ball.Position.z;                 // negative: the player's side
             float lo = ballZ - serveStand.y, hi = ballZ - serveStand.x; // range of the racket's z
@@ -208,6 +213,11 @@ public class PlayerRacketController : RacketController
         }
         runVelocity = Vector3.MoveTowards(runVelocity, wish, acceleration * dt);
         Vector3 hand = new Vector3(Racket.Position.x + runVelocity.x * dt, Racket.height, Racket.Position.z + runVelocity.z * dt);
+        if (baseline)
+        {
+            float reach = gm.Court.halfWidth + 0.15f; // a little past the sidelines (the fixed camera frames just that)
+            hand = new Vector3(Mathf.Clamp(hand.x, -reach, reach), Racket.height, -gm.BaselineZ);
+        }
         Racket.MoveTo(hand);
         PlaceFeet(groundY);
         if (Mathf.Abs(Racket.Position.x - hand.x) > 1e-4f) runVelocity.x = 0f;
@@ -272,6 +282,23 @@ public class PlayerRacketController : RacketController
         Racket.MoveTo(hit);
     }
 
+    // Baseline style: the stick (as it was when the button was pressed) aims the ball: sideways = where it lands across the court (neutral = the middle),
+    // towards the net = faster, away = slower and higher. The ball bounces once in the opponent's court and arrives at the opponent's baseline.
+    Vector3 BaselineShot(GameManager gm, Vector3 contact, Vector2 stick, float offCentre)
+    {
+        Court court = gm.Court;
+        float reach = court.halfWidth - landMargin;
+        float aimX = Mathf.Clamp(stick.x * reach - offCentre * offCentreFactor * buttonOffCentre, -reach, reach);
+        float t = baselineFlight * Mathf.Lerp(1.3f, 0.8f, Mathf.InverseLerp(-1f, 1f, stick.y));
+        return gm.Ball.SolveBounceShot(contact, aimX, -Racket.SideSign * gm.BaselineZ, t, gm.Net, court.groundY);
+    }
+
+    // The shot the stick would make now (the ball not touched yet): for the arc that shows where it would go. No side effects.
+    public Vector3 PreviewBaselineShot(GameManager gm, Vector3 contact)
+    {
+        return BaselineShot(gm, contact, controls != null ? controls.Move : Vector2.zero, 0f);
+    }
+
     // How clean the ball was met, 0-1: close to the racket head and at a comfortable height.
     float Cleanness(Vector3 contact)
     {
@@ -317,6 +344,7 @@ public class PlayerRacketController : RacketController
         if (UsesButton) PrepareButtonSwing(gm, contact, maxX);
         float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
         LastSwipeSpeed = forwardSpeed;
+        if (gm.Baseline) return BaselineShot(gm, contact, UsesButton ? SwingStick : Vector2.zero, contact.x - Racket.HitCenter.x);
         float dx = (contact.x - Racket.HitCenter.x) * (UsesButton ? buttonOffCentre : 1f); // off-centre hit, measured where the racket met the ball
 
         float maxDepth = court.halfLength - landMargin;

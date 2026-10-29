@@ -94,6 +94,8 @@ public class AiRacketController : RacketController
     protected float reactTimer;
     protected Vector3 errorVec;
     protected bool blunder;
+    bool hasArrival;   // baseline style: where the ball will reach the CPU's line after its bounce
+    float arrivalX;
 
     public virtual void SetLevel(int level)
     {
@@ -124,6 +126,7 @@ public class AiRacketController : RacketController
 
     public override void Tick(GameManager gm)
     {
+        if (gm.Baseline) { TickBaseline(gm); return; }
         Vector3 goal = ReadyPosition(gm);
         if (gm.AiServing)
             goal = new Vector3(gm.Ball.Position.x, Racket.height, gm.Ball.Position.z);
@@ -143,8 +146,32 @@ public class AiRacketController : RacketController
         Racket.MoveTo(Vector3.MoveTowards(Racket.Position, goal, speed * Time.deltaTime));
     }
 
+    // Baseline style: the CPU only slides along its line. After every hit of the player it works out where the ball will arrive (after the
+    // bounce), reacts after a moment and walks there at its speed; a ball that will bounce out or hit the net is let go.
+    void TickBaseline(GameManager gm)
+    {
+        float goalX = Racket.Position.x;
+        if (gm.AiShouldChase)
+        {
+            reactTimer -= Time.deltaTime;
+            if (reactTimer <= 0f) goalX = hasArrival ? arrivalX + errorVec.x : gm.Player.Racket.Position.x * readyFollowX;
+        }
+        else if (!gm.AiServing) goalX = gm.Player.Racket.Position.x * readyFollowX;
+        float x = Mathf.MoveTowards(Racket.Position.x, goalX, speed * Time.deltaTime);
+        Racket.MoveTo(new Vector3(x, Racket.height, gm.BaselineZ));
+    }
+
+    void PredictArrival(GameManager gm)
+    {
+        var f = gm.Ball.Predict(gm.Ball.Position, gm.Ball.Velocity, gm.Court, gm.Net, gm.BaselineZ);
+        bool inCourt = f.bounced && gm.Court.Contains(f.bounce);
+        hasArrival = f.reached && (inCourt || !letOutBallsGo);
+        arrivalX = f.end.x;
+    }
+
     public override void OnOpponentHit(GameManager gm)
     {
+        if (gm.Baseline) PredictArrival(gm);
         reactTimer = reaction;
         blunder = Random.value < mistake;
         float err = error + (blunder ? mistakeOffset : 0f);
@@ -218,6 +245,7 @@ public class AiRacketController : RacketController
     // Aims at the spot that is hardest for the player to reach, with noise that shrinks as the level rises.
     public override Vector3 ComputeShot(GameManager gm, Vector3 contact)
     {
+        if (gm.Baseline) return BaselineShot(gm, contact);
         Court court = gm.Court;
         Racket player = gm.Player.Racket;
         Vector3 pp = player.Position + player.Velocity * playerLookAhead;
@@ -272,6 +300,54 @@ public class AiRacketController : RacketController
         float t = flight * Random.Range(flightJitter.x, flightJitter.y) * Mathf.Lerp(1f, pressureFlight, pressure);
         t = Mathf.Max(flightMin * 0.8f, t);
         return gm.Ball.SolveHit(contact, bestX, zSign * bestDepth, court.groundY + gm.Ball.radius, t, gm.Net);
+    }
+
+    // Baseline style: the serve goes the opposite way of the racket; a return goes where it is hardest for the player to reach (far from the
+    // player's racket, with noise that shrinks as the level rises). Now and then the ball goes out (wide or long).
+    Vector3 BaselineShot(GameManager gm, Vector3 contact)
+    {
+        Court court = gm.Court;
+        float reach = court.halfWidth - edgeMargin;
+        float arriveZ = -Racket.SideSign * gm.BaselineZ;
+        float px = gm.Player.Racket.Position.x;
+        float aimX;
+        if (gm.CurrentState == GameManager.State.Serving)
+            aimX = Mathf.Clamp(-Racket.Position.x / court.halfWidth * reach + Random.Range(-0.6f, 0.6f), -reach, reach);
+        else
+        {
+            float maxScore = float.MinValue;
+            for (int ix = 0; ix < GridX; ix++)
+            {
+                float x = Mathf.Lerp(-reach, reach, ix / (float)(GridX - 1));
+                float score = Mathf.Abs(x - px) + Random.Range(-aimNoise, aimNoise);
+                for (int r = 0; r < recentCount; r++)
+                    if (Mathf.Abs(recentTargets[r].x - x) < repeatRadius * 0.5f) { score -= repeatPenalty; break; }
+                scores[ix] = score;
+                maxScore = Mathf.Max(maxScore, score);
+            }
+            float total = 0f;
+            for (int ix = 0; ix < GridX; ix++)
+            {
+                scores[ix] = aimVariety <= 0.0001f ? (scores[ix] >= maxScore ? 1f : 0f) : Mathf.Exp((scores[ix] - maxScore) / aimVariety);
+                total += scores[ix];
+            }
+            float pick = Random.value * total;
+            int chosen = GridX - 1;
+            for (int ix = 0; ix < GridX; ix++) { pick -= scores[ix]; if (pick <= 0f) { chosen = ix; break; } }
+            aimX = Mathf.Lerp(-reach, reach, chosen / (float)(GridX - 1));
+            recentTargets[recentHead] = new Vector2(aimX, 0f);
+            recentHead = (recentHead + 1) % Recent;
+            recentCount = Mathf.Min(recentCount + 1, Recent);
+        }
+
+        if (Random.value < shotMistake)
+        {
+            if (Random.value < 0.5f) aimX = (aimX >= 0f ? 1f : -1f) * court.halfWidth * 1.7f; // wide
+            else arriveZ *= 2f;                                                               // long
+        }
+        float pressure = Mathf.InverseLerp(1.5f, 5f, Mathf.Abs(aimX - px));
+        float t = Mathf.Max(flightMin * 0.8f, flight * Random.Range(flightJitter.x, flightJitter.y) * Mathf.Lerp(1f, pressureFlight, pressure));
+        return gm.Ball.SolveBounceShot(contact, aimX, arriveZ, t, gm.Net, court.groundY);
     }
 
 #if UNITY_EDITOR

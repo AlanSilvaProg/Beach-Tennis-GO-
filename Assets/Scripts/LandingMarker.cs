@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // Small contracting waves on the ground showing where the ball will come down (they start at the full size and shrink to the centre). Follows the ball's current
 // trajectory (so it updates after every hit) and hides while the ball is held, grounded or hidden.
+// Baseline style (Training): the waves mark where the ball (coming to the player) will bounce, and an arc draws the path it will take after the
+// bounce, up to the player's line; once the ball has bounced the waves go away and the arc shows what is left of the path.
 [RequireComponent(typeof(Ball))]
 public class LandingMarker : MonoBehaviour
 {
@@ -15,18 +18,48 @@ public class LandingMarker : MonoBehaviour
     [Tooltip("Ignored below this speed (the ball hanging for the serve).")]
     public float minSpeed = 0.5f;
 
+    [Header("Arc after the bounce (baseline style)")]
+    [Tooltip("Material of the arc (shader BeachTennisGO/LandingArc). Empty = no arc.")]
+    public Material arcMaterial;
+    public float arcWidth = 0.12f;
+    public Color arcColor = new Color(1f, 0.95f, 0.45f, 0.95f);
+    [Range(0f, 1f)] public float arcEndAlpha = 0.35f;
+    [Tooltip("The arc of the player's own shot (where it would go with the stick as it is now), shown while the player serves and while a ball is coming to the player.")]
+    public Color aimColor = new Color(0.55f, 0.9f, 1f, 0.95f);
+
     static readonly int Intensity = Shader.PropertyToID("_Intensity");
 
     Ball ball;
     Court court;
     MaterialPropertyBlock block;
     float shownFor;
+    GameManager game;
+    LineRenderer arc, aimArc;
+    readonly List<Vector3> path = new List<Vector3>(256);
+    Vector3[] points = new Vector3[256];
 
     void Awake()
     {
         ball = GetComponent<Ball>();
         court = FindFirstObjectByType<Court>();
         if (marker != null) marker.transform.localScale = new Vector3(diameter, diameter, 1f);
+        if (arcMaterial != null) { arc = MakeArc("LandingArc"); aimArc = MakeArc("AimArc"); }
+    }
+
+    LineRenderer MakeArc(string name)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        var lr = go.AddComponent<LineRenderer>();
+        lr.sharedMaterial = arcMaterial;
+        lr.useWorldSpace = true;
+        lr.alignment = LineAlignment.View;
+        lr.numCapVertices = 4;
+        lr.numCornerVertices = 2;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lr.receiveShadows = false;
+        lr.enabled = false;
+        return lr;
     }
 
     void OnValidate()
@@ -42,6 +75,7 @@ public class LandingMarker : MonoBehaviour
         if (court == null || ball == null) return false;
         Vector3 v = ball.Velocity;
         if (ball.Grounded || v.sqrMagnitude <= minSpeed * minSpeed) return false;
+        if (Baseline && !(v.z < 0f && game.Bounces == 0 && game.CurrentState == GameManager.State.Rally)) return false; // only the first bounce of a ball coming to the player
         // Time until the ball centre reaches the resting height: p.y + v.y t - g t^2 / 2 = y0.
         float y0 = court.groundY + ball.radius;
         float disc = v.y * v.y + 2f * ball.gravity * (ball.Position.y - y0);
@@ -51,9 +85,79 @@ public class LandingMarker : MonoBehaviour
         return true;
     }
 
+    bool Baseline
+    {
+        get
+        {
+            if (game == null) game = FindFirstObjectByType<GameManager>();
+            return game != null && game.Baseline;
+        }
+    }
+
+    // The arc: the path after the bounce (before it) or what is left of the path (after it), up to the player's line.
+    void UpdateArc()
+    {
+        if (arc == null) return;
+        bool show = false;
+        if (Baseline && !ball.Grounded && game.CurrentState == GameManager.State.Rally && ball.Velocity.z < 0f && ball.Velocity.sqrMagnitude > minSpeed * minSpeed)
+        {
+            path.Clear();
+            var f = ball.Predict(ball.Position, ball.Velocity, court, game.Net, game.BaselineZ, path, game.Bounces);
+            int from = game.Bounces == 0 ? f.bounceIndex : 0;
+            int n = path.Count - from;
+            if (!f.hitNet && (game.Bounces > 0 || f.bounced) && n >= 2)
+            {
+                if (points.Length < n) points = new Vector3[n * 2];
+                for (int i = 0; i < n; i++) points[i] = path[from + i];
+                arc.positionCount = n;
+                arc.SetPositions(points);
+                float w = arcWidth;
+                arc.widthMultiplier = w;
+                var a = new Color(arcColor.r, arcColor.g, arcColor.b, arcColor.a);
+                var b = new Color(arcColor.r, arcColor.g, arcColor.b, arcColor.a * arcEndAlpha);
+                arc.startColor = a; arc.endColor = b;
+                show = true;
+            }
+        }
+        arc.enabled = show;
+        UpdateAimArc();
+    }
+
+    // The arc of the player's own next shot: from where the ball will be hit, over the bounce, to the opponent's line. It follows the stick.
+    void UpdateAimArc()
+    {
+        if (aimArc == null) return;
+        bool show = false;
+        var human = game != null ? game.Player : null;
+        bool myTurn = game != null && game.Baseline && human != null && human.UsesButton
+                      && (game.PlayerServing || (game.CurrentState == GameManager.State.Rally && !ball.Grounded && ball.Velocity.z < 0f));
+        if (myTurn)
+        {
+            Vector3 contact = new Vector3(human.Racket.Position.x, ball.Position.y > 0.4f && !game.PlayerServing ? 1.0f : 1.1f, -game.BaselineZ);
+            if (game.PlayerServing) contact.z = ball.Position.z;
+            Vector3 v = human.PreviewBaselineShot(game, contact);
+            path.Clear();
+            var f = ball.Predict(contact, v, court, game.Net, game.BaselineZ, path, 0);
+            int n = path.Count;
+            if (!f.hitNet && n >= 2)
+            {
+                if (points.Length < n) points = new Vector3[n * 2];
+                for (int i = 0; i < n; i++) points[i] = path[i];
+                aimArc.positionCount = n;
+                aimArc.SetPositions(points);
+                aimArc.widthMultiplier = arcWidth;
+                aimArc.startColor = aimColor;
+                aimArc.endColor = new Color(aimColor.r, aimColor.g, aimColor.b, aimColor.a * arcEndAlpha);
+                show = true;
+            }
+        }
+        aimArc.enabled = show;
+    }
+
     void LateUpdate()
     {
         if (marker == null || court == null) return;
+        UpdateArc();
         bool flying = TryGetLanding(out Vector3 hit);
 
         marker.enabled = flying;
@@ -70,5 +174,7 @@ public class LandingMarker : MonoBehaviour
     void OnDisable()
     {
         if (marker != null) marker.enabled = false;
+        if (arc != null) arc.enabled = false;
+        if (aimArc != null) aimArc.enabled = false;
     }
 }

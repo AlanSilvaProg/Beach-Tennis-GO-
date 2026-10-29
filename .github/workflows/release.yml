@@ -3,12 +3,12 @@ name: Release
 # O Unity nao roda no runner (exigiria licenca): a build (WebGLBuild/) e gerada localmente com
 # scripts/build-release.sh e versionada. Este workflow empacota essa build e cria o GitHub Release.
 #  - Tag v*: release normal (a versao e a propria tag).
-#  - Push na branch new-model: pre-release "<branch>-build-<n>" com a build versionada nessa branch (a tag e criada no commit do push).
+#  - Push nas branches listadas em `branches` abaixo (new-model, new-model-baseline): pre-release "<branch>-build-<n>" com a build versionada nessa branch (a tag e criada no commit do push).
 #    Para outra branch gerar release tambem, acrescente o nome dela em branches.
 on:
   push:
     tags: ['v*']
-    branches: [new-model]
+    branches: [new-model, new-model-baseline]
   workflow_dispatch:
     inputs:
       version:

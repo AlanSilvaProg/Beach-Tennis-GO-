@@ -80,6 +80,18 @@ public class CameraRig : MonoBehaviour
 
     const int PullbackSteps = 12;
 
+    [Header("Fixed view (baseline style)")]
+    [Tooltip("The camera never moves: it sits where the player's baseline row (the racket's whole range) and the area just behind the baseline are in view on every screen shape. Set by the GameManager in the baseline style.")]
+    public bool fixedView;
+    [Tooltip("The racket row is this far inside the baseline (same as the GameManager's Baseline Inset).")]
+    public float fixedRacketInset = 0.6f;
+    [Tooltip("How far behind the baseline stays in view (m).")]
+    public float fixedBehind = 1.4f;
+    [Tooltip("Space kept at each side of the screen (viewport fraction).")]
+    [Range(0f, 0.2f)] public float fixedSidePadding = 0.04f;
+    [Tooltip("Sideways reach of the racket row, beyond the sidelines (m).")]
+    public float fixedSideReach = 0.15f;
+
     Camera cam;
     GameManager game;
     Ball ball;
@@ -88,6 +100,7 @@ public class CameraRig : MonoBehaviour
     bool hasFocusA, hasFocusB;
     Vector3 velocity;
     float fitDistance;
+    float fixedDistance;
     float aspectFactor = 1f;
     float lastAspect;
     bool serving = true;
@@ -190,6 +203,7 @@ public class CameraRig : MonoBehaviour
     // Where the camera wants to be: panned to the racket, then backed off until the racket (and, when needed, the area behind the baseline) fits.
     Vector3 Target()
     {
+        if (fixedView) return new Vector3(lookAt.x, lookAt.y, lookAt.z) + dir * fixedDistance;
         UpdateFocus();
         float pan = 0f;
         if (playerRacket != null) pan = Mathf.Clamp(playerRacket.Position.x * followX, -maxPan, maxPan);
@@ -260,12 +274,38 @@ public class CameraRig : MonoBehaviour
         return d;
     }
 
+    // Fixed view: the closest distance (looking at `lookAt`) from which the racket row, the area behind the baseline and the far baseline's
+    // centre are all inside the screen (with the racket padding).
+    float FitFixed(float aspect)
+    {
+        float hw = court.halfWidth + fixedSideReach, rowZ = -(court.halfLength - fixedRacketInset), behindZ = -(court.halfLength + fixedBehind);
+        Vector3[] pts =
+        {
+            new Vector3(-hw, 0f, rowZ), new Vector3(hw, 0f, rowZ), new Vector3(-hw, 0f, behindZ), new Vector3(hw, 0f, behindZ),
+            new Vector3(0f, 0f, court.halfLength)
+        };
+        Vector3 centre = lookAt;
+        float d = minDistance;
+        for (int i = 0; i < 600; i++, d += 0.1f)
+        {
+            bool ok = true;
+            foreach (var c in pts)
+            {
+                if (!Project(c, centre + dir * d, aspect, out Vector2 v)
+                    || v.x < fixedSidePadding || v.x > 1f - fixedSidePadding || v.y < viewportPadding || v.y > 1f - viewportPadding) { ok = false; break; }
+            }
+            if (ok) break;
+        }
+        return d;
+    }
+
     // The whole-court distance at the reference screen shape (the same position on every screen), then the correction for the real shape.
     void Refit()
     {
         cam.fieldOfView = fieldOfView;
         dir = new Vector3(0f, Mathf.Sin(pitch * Mathf.Deg2Rad), -Mathf.Cos(pitch * Mathf.Deg2Rad));
         fitDistance = FitDistance(referenceAspect);
+        fixedDistance = FitFixed(cam.aspect);
 
         float aspect = cam.aspect;
         lastAspect = aspect;

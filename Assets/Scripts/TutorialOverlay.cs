@@ -127,7 +127,9 @@ public class TutorialOverlay : MonoBehaviour
         if (knob != null)
         {
             float a = t * 2.2f;
-            knob.anchoredPosition = knobCentre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 62f;
+            knob.anchoredPosition = game != null && game.Baseline
+                ? knobCentre + new Vector2(Mathf.Sin(a) * 62f, 0f)                                  // sideways only
+                : knobCentre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 62f;
         }
         if (pulseButton != null) pulseButton.localScale = Vector3.one * (1f + 0.06f * Mathf.Sin(t * 5f));
         if (hint != null) { var c = hint.color; c.a = (0.55f + 0.45f * Mathf.Sin(t * 3.2f)) * shown; hint.color = c; }
@@ -158,6 +160,13 @@ public class TutorialOverlay : MonoBehaviour
     {
         Text("MoveLabel", content, I18n.Tr("MOVE"), 100, at + new Vector2(0f, 250f), new Vector2(900f, 140f));
         float k = 130f, gap = 14f;
+        if (game != null && game.Baseline)
+        {
+            // along the baseline the player only runs sideways: just A and D
+            Key("A", at + new Vector2(-(k + gap) * 0.5f, 0f), k);
+            Key("D", at + new Vector2((k + gap) * 0.5f, 0f), k);
+            return;
+        }
         Key("W", at + new Vector2(0f, k * 0.5f + gap * 0.5f + 20f), k);
         Key("A", at + new Vector2(-(k + gap), -(k * 0.5f + gap * 0.5f) + 20f), k);
         Key("S", at + new Vector2(0f, -(k * 0.5f + gap * 0.5f) + 20f), k);
