@@ -146,6 +146,25 @@ public class Ball : MonoBehaviour
         return v;
     }
 
+    // Launch velocity that makes the ball touch the ground at (bx, bz) after t1 simulated seconds (the first bounce of the baseline style). The flight
+    // is lengthened (higher arc) until it clears the net.
+    public Vector3 SolveBounceAt(Vector3 p, float bx, float bz, float t1, Net net, float groundY)
+    {
+        float g = gravity, y0 = groundY + radius;
+        Vector3 v = Vector3.zero;
+        for (int i = 0; i < 16; i++)
+        {
+            float vy = (y0 - p.y) / t1 + 0.5f * g * t1;
+            v = new Vector3((bx - p.x) / t1, vy, (bz - p.z) / t1);
+            float tn = Mathf.Abs(v.z) > 0.01f ? -p.z / v.z : -1f;
+            if (tn <= 0f || tn >= t1) break;
+            float yn = p.y + v.y * tn - 0.5f * g * tn * tn;
+            if (yn > net.TopY + radius + 0.25f) break;
+            t1 *= 1.08f;
+        }
+        return v;
+    }
+
     public struct Flight
     {
         public bool bounced;      // it touched the ground

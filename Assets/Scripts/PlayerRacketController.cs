@@ -66,9 +66,22 @@ public class PlayerRacketController : RacketController
     [Tooltip("Speed towards the net of the last shot (m/s); read by ShotFx to grade it.")]
     public float LastSwipeSpeed { get; private set; }
 
-    [Header("Baseline style (Training)")]
-    [Tooltip("Flight time (simulated seconds) of the ball from the racket to its bounce: lower = faster ball. The stick towards the net makes it up to 20% faster, away from the net up to 30% slower.")]
+    [Header("Baseline style (Training): run by itself, tap to hit")]
+    [Tooltip("Flight time (simulated seconds) of the ball from the racket to its bounce: lower = faster ball. A tap far away makes it up to 15% faster, a tap close up to 25% slower.")]
     public float baselineFlight = 1.05f;
+    [Tooltip("The character runs by itself to where the ball will arrive, at this speed (m/s).")]
+    public float autoRunSpeed = 9f;
+    [Tooltip("Speed (m/s) at which it goes back to the middle between balls.")]
+    public float recoverSpeed = 5f;
+    [Tooltip("A tap made before the ball has got to the racket waits this long (s) and hits when the ball arrives: there is no need to tap at the very moment.")]
+    public float tapBuffer = 1.5f;
+    [Tooltip("The swing starts when the ball is this far (seconds of its flight) from the racket's line, so the racket meets it as it arrives.")]
+    public float swingLead = 0.12f;
+    [Tooltip("The target of a tap stays this far inside the lines (m), and at least this far past the net.")]
+    public float targetMargin = 0.35f;
+    public float targetNetMargin = 0.8f;
+    [Tooltip("How far the pointer has to be moved for the strongest / widest shot, as a fraction of the screen's short side.")]
+    [Range(0.05f, 0.6f)] public float dragRange = 0.22f;
 
     [Header("Shot")]
     [Tooltip("Ball speed (m/s) of the push that dies at the net.")]
@@ -116,6 +129,7 @@ public class PlayerRacketController : RacketController
     PlayerControls controls;
     Vector3 feet, runVelocity;
     protected float swingStart = -10f;
+    protected int swingFrame;
     protected bool swingOpen;
     float lastTick = -10f;
     // The character started a swing, with the stick as it was (the other player's copy of this racket is told).
@@ -131,7 +145,8 @@ public class PlayerRacketController : RacketController
         {
             if (!UsesButton) return true;
             float t = Time.time - swingStart;
-            return swingOpen && t >= contactWindow.x && t <= contactWindow.y;
+            // A slow frame (a hitch) must not make the hit miss: for the first frames after the press the end of the window does not count.
+            return swingOpen && t >= contactWindow.x && (t <= contactWindow.y || Time.frameCount - swingFrame <= 2);
         }
     }
     // The stick the shot is read from.
@@ -181,7 +196,6 @@ public class PlayerRacketController : RacketController
             character.Place(feet);
             character.SnapFacing();
             character.LookAt(Vector3.zero, false);
-            if (controls != null) controls.SetVisible(false);
         }
     }
 
@@ -191,8 +205,95 @@ public class PlayerRacketController : RacketController
         if (controls != null && controls.Visible && Time.unscaledTime - lastTick > 0.25f) controls.SetVisible(false);
     }
 
+    // ---------- baseline style: no stick, no button ----------
+    Vector2 lockedTarget;         // where the tap that is waiting / the swing that is on sends the ball
+    float pendingUntil = -1f;
+
+    // How the pointer moved while it was down, as a spot of the opponent's half: sideways = where across the court, up = deeper (a harder shot), down = shorter
+    // (a softer one); no movement is a medium shot down the middle.
+    Vector2 DragToTarget(GameManager gm, Vector2 drag)
+    {
+        Court court = gm.Court;
+        float range = Mathf.Max(60f, Mathf.Min(Screen.width, Screen.height) * dragRange);
+        float nx = Mathf.Clamp(drag.x / range, -1f, 1f), ny = Mathf.Clamp(drag.y / range, -1f, 1f);
+        float maxX = court.halfWidth - targetMargin, maxZ = court.halfLength - targetMargin;
+        return new Vector2(nx * maxX, Mathf.Lerp(targetNetMargin, maxZ, 0.5f + 0.5f * ny));
+    }
+
+    // 0 for a tap just over the net, 1 for one at the far baseline: the strength of the shot.
+    float TargetPower(GameManager gm, Vector2 target)
+    {
+        return Mathf.InverseLerp(targetNetMargin, gm.Court.halfLength - targetMargin, target.y);
+    }
+
+    void TickBaseline(GameManager gm)
+    {
+        lastTick = Time.unscaledTime;
+        controls.TapMode = true;
+        controls.SetVisible(true);
+        float dt = Time.deltaTime;
+        Ball ball = gm.Ball;
+        Court court = gm.Court;
+        bool rally = gm.CurrentState == GameManager.State.Rally;
+        bool incoming = rally && !gm.AiShouldChase && ball.Velocity.z < 0f && !ball.Grounded;   // a ball on its way to the player
+
+        // 1. It runs by itself to where the ball will arrive (the middle when there is nothing to chase).
+        float reach = court.halfWidth + 0.15f;
+        float goalX = 0f, speed = recoverSpeed;
+        if (incoming)
+        {
+            var f = ball.Predict(ball.Position, ball.Velocity, court, gm.Net, gm.BaselineZ, null, gm.Bounces);
+            goalX = f.reached ? f.end.x : Racket.Position.x;
+            speed = autoRunSpeed;
+        }
+        goalX = Mathf.Clamp(goalX, -reach, reach);
+        float x = Mathf.MoveTowards(Racket.Position.x, goalX, speed * dt);
+        Racket.MoveTo(new Vector3(x, Racket.height, -gm.BaselineZ));
+        PlaceFeet(court.groundY);
+        bool ballOn = ball != null && ball.gameObject.activeInHierarchy && gm.MatchOn;
+        character.LookAt(ball != null ? ball.Position : Vector3.zero, ballOn);
+
+        // 2. Where the pointer is now (the arc follows it), and the tap.
+        if (controls.ConsumeTap(out Vector2 drag))
+        {
+            lockedTarget = DragToTarget(gm, drag);
+            bool canSend = gm.PlayerServing ? gm.ServeInputOpen : incoming;
+            if (canSend) pendingUntil = Time.time + tapBuffer;
+        }
+
+        // 3. The swing starts when the ball is about to get to the racket (at once when serving): the tap picks the shot, the timing is done for the player.
+        if (pendingUntil > Time.time && Time.time - swingStart >= swingCooldown)
+        {
+            bool go = false;
+            if (gm.PlayerServing) go = true;
+            else if (incoming && gm.Bounces >= 1)
+            {
+                float dz = Mathf.Abs(ball.Position.z + gm.BaselineZ);
+                float lead = Mathf.Abs(ball.Velocity.z) * gm.ballSpeed * swingLead;
+                go = dz <= lead + 0.5f;
+            }
+            if (go) StartTapSwing(gm);
+        }
+        if (swingOpen && Time.time - swingStart > contactWindow.y && Time.frameCount - swingFrame > 2) swingOpen = false;
+    }
+
+    void StartTapSwing(GameManager gm)
+    {
+        pendingUntil = -1f;
+        swingStart = Time.time;
+        swingFrame = Time.frameCount;
+        swingOpen = true;
+        // For the grade of the shot: a tap far away is a strong stroke ("stick forward"), one close up a soft one.
+        float p = TargetPower(gm, lockedTarget);
+        stickAtPress = new Vector2(lockedTarget.x / Mathf.Max(0.1f, gm.Court.halfWidth), p * 2f - 1f);
+        character.Swing();
+        SwingStarted?.Invoke(stickAtPress);
+    }
+
     void TickCharacter(GameManager gm)
     {
+        if (gm.Baseline) { TickBaseline(gm); return; }
+        controls.TapMode = false;
         lastTick = Time.unscaledTime;
         controls.SetVisible(true);
         float dt = Time.deltaTime;
@@ -231,12 +332,13 @@ public class PlayerRacketController : RacketController
         if (controls.ConsumeSwing() && Time.time - swingStart >= swingCooldown)
         {
             swingStart = Time.time;
+            swingFrame = Time.frameCount;
             swingOpen = true;
             stickAtPress = controls.Move;
             character.Swing();
             SwingStarted?.Invoke(stickAtPress);
         }
-        if (swingOpen && Time.time - swingStart > contactWindow.y) swingOpen = false;
+        if (swingOpen && Time.time - swingStart > contactWindow.y && Time.frameCount - swingFrame > 2) swingOpen = false;
     }
 
     public override void Tick(GameManager gm)
@@ -284,20 +386,14 @@ public class PlayerRacketController : RacketController
 
     // Baseline style: the stick (as it was when the button was pressed) aims the ball: sideways = where it lands across the court (neutral = the middle),
     // towards the net = faster, away = slower and higher. The ball bounces once in the opponent's court and arrives at the opponent's baseline.
-    Vector3 BaselineShot(GameManager gm, Vector3 contact, Vector2 stick, float offCentre)
+    Vector3 BaselineShot(GameManager gm, Vector3 contact, Vector2 target)
     {
         Court court = gm.Court;
-        float reach = court.halfWidth - landMargin;
-        float aimX = Mathf.Clamp(stick.x * reach - offCentre * offCentreFactor * buttonOffCentre, -reach, reach);
-        float t = baselineFlight * Mathf.Lerp(1.3f, 0.8f, Mathf.InverseLerp(-1f, 1f, stick.y));
-        return gm.Ball.SolveBounceShot(contact, aimX, -Racket.SideSign * gm.BaselineZ, t, gm.Net, court.groundY);
+        float t = baselineFlight * Mathf.Lerp(1.25f, 0.85f, TargetPower(gm, target));
+        return gm.Ball.SolveBounceAt(contact, target.x, target.y, t, gm.Net, court.groundY);
     }
 
-    // The shot the stick would make now (the ball not touched yet): for the arc that shows where it would go. No side effects.
-    public Vector3 PreviewBaselineShot(GameManager gm, Vector3 contact)
-    {
-        return BaselineShot(gm, contact, controls != null ? controls.Move : Vector2.zero, 0f);
-    }
+
 
     // How clean the ball was met, 0-1: close to the racket head and at a comfortable height.
     float Cleanness(Vector3 contact)
@@ -344,7 +440,7 @@ public class PlayerRacketController : RacketController
         if (UsesButton) PrepareButtonSwing(gm, contact, maxX);
         float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
         LastSwipeSpeed = forwardSpeed;
-        if (gm.Baseline) return BaselineShot(gm, contact, UsesButton ? SwingStick : Vector2.zero, contact.x - Racket.HitCenter.x);
+        if (gm.Baseline) return BaselineShot(gm, contact, lockedTarget);
         float dx = (contact.x - Racket.HitCenter.x) * (UsesButton ? buttonOffCentre : 1f); // off-centre hit, measured where the racket met the ball
 
         float maxDepth = court.halfLength - landMargin;

@@ -5,8 +5,19 @@ using UnityEngine.UI;
 // see-through "ghost" racket pulls back behind the ball and swings through it, with the tutorial hand holding it (the same hand as the menu's
 // TapHint). It keeps looping, whatever the player does with the racket, until the serve is hit.
 // Nothing is written on the screen: the ghost shows both who serves (it only appears when it is the player's serve) and how.
+// Baseline style (Training): the serve is a press, a move of the pointer and a release. The same hand shows it: it presses on the screen (a ring), drags
+// up and to one side (a trail follows) and lets go (a ring spreads), alternating the side each time; it shows up when the player is slow to serve.
 public class ServeHint : MonoBehaviour
 {
+    [Header("Baseline style")]
+    [Tooltip("Seconds of the player's serve before the hand shows how (the controls tutorial has already been seen at the first serve).")]
+    public float baselineShowAfter = 2.5f;
+    [Tooltip("Seconds of one demonstration (press, drag, release, rest).")]
+    public float baselineLoop = 2.8f;
+    [Tooltip("Where the hand presses (fractions of the screen, from the bottom left) and how far it drags (up, sideways) as a fraction of the screen's height.")]
+    public Vector2 pressAt = new Vector2(0.5f, 0.3f);
+    public Vector2 dragBy = new Vector2(0.2f, 0.26f);
+
     [Header("Scene")]
     public GameManager game;
     [Tooltip("The tutorial hand (a UI Image).")]
@@ -82,9 +93,139 @@ public class ServeHint : MonoBehaviour
         ghost.gameObject.SetActive(false);
     }
 
+    // ---------- baseline style: press, drag, release ----------
+    RectTransform pressRing, releaseRing, trail;
+    Image pressImage, releaseImage, trailImage;
+    float baselineWaited, baselineShown, baselineVisibility;
+    int demoCount;
+    int lastDemo = -1;
+    Sprite ringSprite;
+
+    void BuildBaselineParts()
+    {
+        if (pressRing != null || area == null) return;
+        const int n = 128;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float r = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(n * 0.5f, n * 0.5f)) / (n * 0.5f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(1f - Mathf.Abs(r - 0.9f) / 0.1f)));
+            }
+        tex.Apply();
+        ringSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f);
+        pressRing = MakePart("DemoPress", out pressImage);
+        releaseRing = MakePart("DemoRelease", out releaseImage);
+        trail = MakePart("DemoTrail", out trailImage);
+        trailImage.sprite = null;                 // a plain bar
+        pressImage.sprite = releaseImage.sprite = ringSprite;
+        if (hand != null) hand.SetAsLastSibling();
+    }
+
+    RectTransform MakePart(string name, out Image image)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(area, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        image = go.GetComponent<Image>();
+        image.raycastTarget = false;
+        go.SetActive(false);
+        return rt;
+    }
+
+    Vector2 ToLocal(Vector2 screen)
+    {
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(area, screen, null, out var local);
+        return local;
+    }
+
+    void UpdateBaselineHint()
+    {
+        if (ghost != null && ghost.gameObject.activeSelf) ghost.gameObject.SetActive(false);
+        BuildBaselineParts();
+        bool serving = game.PlayerServing && !PokiService.AdPlaying && !game.TutorialHold;
+        if (!serving)
+        {
+            baselineWaited = 0f; baselineShown = 0f;
+            baselineVisibility = Mathf.MoveTowards(baselineVisibility, 0f, Time.unscaledDeltaTime * 5f);
+        }
+        else
+        {
+            baselineWaited += Time.unscaledDeltaTime;
+            bool show = baselineWaited >= baselineShowAfter;
+            baselineVisibility = Mathf.MoveTowards(baselineVisibility, show ? 1f : 0f, Time.unscaledDeltaTime * (show ? 3f : 6f));
+            if (show) baselineShown += Time.unscaledDeltaTime;
+        }
+        ApplyBaseline();
+    }
+
+    void ApplyBaseline()
+    {
+        bool visible = baselineVisibility > 0.001f;
+        if (hand != null && hand.gameObject.activeSelf != visible) hand.gameObject.SetActive(visible);
+        if (pressRing == null) return;
+        if (!visible) { pressRing.gameObject.SetActive(false); releaseRing.gameObject.SetActive(false); trail.gameObject.SetActive(false); return; }
+
+        int demo = Mathf.FloorToInt(baselineShown / baselineLoop);
+        float k = (baselineShown % baselineLoop) / baselineLoop;
+        float side = demo % 2 == 0 ? -1f : 1f;                    // one time to the left, the next to the right
+        Vector2 a = new Vector2(Screen.width * pressAt.x, Screen.height * pressAt.y);
+        Vector2 b = a + new Vector2(side * Screen.height * dragBy.x, Screen.height * dragBy.y);
+        Vector2 la = ToLocal(a), lb = ToLocal(b);
+
+        // 0-0.18 the hand comes in and presses; 0.18-0.62 it drags; 0.62-0.78 it lets go; then it fades.
+        float drag = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.18f, 0.62f, k));
+        Vector2 pos = Vector2.Lerp(la, lb, drag);
+        float fade = k < 0.1f ? k / 0.1f : (k > 0.82f ? 1f - Mathf.InverseLerp(0.82f, 1f, k) : 1f);
+        float alpha = baselineVisibility * fade;
+
+        // the ring where it pressed (stays while the finger is down)
+        bool down = k >= 0.12f && k < 0.66f;
+        pressRing.gameObject.SetActive(down);
+        if (down)
+        {
+            pressRing.anchoredPosition = la;
+            float s = 1f + 0.08f * Mathf.Sin(baselineShown * 9f);
+            pressRing.sizeDelta = new Vector2(120f, 120f) * s;
+            pressImage.color = new Color(1f, 1f, 1f, 0.85f * alpha);
+        }
+        // the trail from the press to the finger
+        Vector2 d = pos - la;
+        bool showTrail = down && d.magnitude > 8f;
+        trail.gameObject.SetActive(showTrail);
+        if (showTrail)
+        {
+            trail.sizeDelta = new Vector2(d.magnitude, 10f);
+            trail.anchoredPosition = la + d * 0.5f;
+            trail.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
+            trailImage.color = new Color(1f, 0.9f, 0.4f, 0.8f * alpha);
+        }
+        // the ring that spreads where it let go
+        float rel = Mathf.InverseLerp(0.62f, 0.8f, k);
+        bool burst = k >= 0.62f && k < 0.8f;
+        releaseRing.gameObject.SetActive(burst);
+        if (burst)
+        {
+            releaseRing.anchoredPosition = lb;
+            releaseRing.sizeDelta = Vector2.one * Mathf.Lerp(90f, 230f, rel);
+            releaseImage.color = new Color(1f, 0.9f, 0.4f, (1f - rel) * alpha);
+        }
+
+        if (hand != null)
+        {
+            hand.localScale = Vector3.one * handScale;
+            hand.anchoredPosition = pos - fingertip * handScale;
+            hand.localEulerAngles = new Vector3(0f, 0f, -12f);
+            var c = handImage.color; c.a = alpha; handImage.color = c;
+        }
+    }
+
     void Update()
     {
-        if (game == null || ghost == null) return;
+        if (game == null) return;
+        if (game.Baseline) { UpdateBaselineHint(); return; }
+        if (ghost == null) return;
         // The character serves with its button: there is no swipe to teach.
         bool buttonServe = game.player is PlayerRacketController pc && pc.UsesButton;
         bool serving = game.PlayerServing && !PokiService.AdPlaying && !buttonServe;

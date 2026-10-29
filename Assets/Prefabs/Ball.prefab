@@ -571,7 +571,6 @@ MonoBehaviour:
   arcWidth: 0.12
   arcColor: {r: 1, g: 0.95, b: 0.45, a: 0.95}
   arcEndAlpha: 0.35
-  aimColor: {r: 0.55, g: 0.9, b: 1, a: 0.95}
 --- !u!1 &8943047851352868138
 GameObject:
   m_ObjectHideFlags: 0

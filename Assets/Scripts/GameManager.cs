@@ -199,6 +199,8 @@ public class GameManager : MonoBehaviour
     public bool Baseline => baselineStyle && !onlineScene;
     // Baseline style: times the ball has touched the sand since the last hit.
     public int Bounces => bounces;
+    // Baseline style: the serve may be hit now (not in the first moment after the ball is set up).
+    public bool ServeInputOpen => stateTimer >= serveInputDelay;
     // |z| of the rackets' line (just inside the baselines).
     public float BaselineZ => court.halfLength - baselineInset;
 

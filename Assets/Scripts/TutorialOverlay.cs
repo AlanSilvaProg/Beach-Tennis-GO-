@@ -124,6 +124,7 @@ public class TutorialOverlay : MonoBehaviour
     void Animate()
     {
         float t = Time.unscaledTime;
+        AnimateBaseline(t);
         if (knob != null)
         {
             float a = t * 2.2f;
@@ -141,7 +142,9 @@ public class TutorialOverlay : MonoBehaviour
     {
         for (int i = content.childCount - 1; i >= 0; i--) Destroy(content.GetChild(i).gameObject);
         knob = pulseButton = null;
+        dragDot = trail = null;
         Vector2 size = root.rect.size;
+        if (game != null && game.Baseline) { BuildBaseline(size); return; }
         bool wide = size.x > size.y * 1.15f;
         // Two groups: MOVE and HIT. Side by side on a wide screen, one over the other on a tall one.
         Vector2 moveAt = wide ? new Vector2(-size.x * 0.22f, 20f) : new Vector2(0f, size.y * 0.2f);
@@ -153,6 +156,72 @@ public class TutorialOverlay : MonoBehaviour
 
         hint = Text("Hint", content, mobile ? I18n.Tr("TAP TO START") : I18n.Tr("CLICK TO START"), 46, new Vector2(0f, -size.y * 0.42f), new Vector2(1200f, 80f));
         hint.color = new Color(1f, 1f, 1f, 0.8f);
+    }
+
+    // ---------- baseline style: the character runs by itself; press, move the pointer and let go to hit ----------
+    RectTransform dragDot, trail;
+    Vector2 padCentre;
+    const float DragReach = 150f;
+    static readonly Vector2[] DragPath =
+    {
+        Vector2.zero, new Vector2(-1f, 0f), Vector2.zero, new Vector2(1f, 0f), Vector2.zero, new Vector2(0f, 1f), Vector2.zero, new Vector2(0f, -1f), Vector2.zero
+    };
+
+    // A ring (where the finger / the mouse is pressed) and a dot that leaves it to each side and up and down, and comes back, with an arrow and a word for each way:
+    // the sides are the direction, up is a stronger shot and down a softer one. Nothing else.
+    void BuildBaseline(Vector2 size)
+    {
+        Vector2 c = new Vector2(0f, size.y * 0.02f);
+        padCentre = c;
+        Text("Title", content, mobile ? I18n.Tr("TOUCH + DRAG") : I18n.Tr("CLICK + DRAG"), 100, c + new Vector2(0f, 430f), new Vector2(1500f, 140f));
+        var sub = Text("Sub", content, I18n.Tr("RELEASE TO HIT"), 54, c + new Vector2(0f, -430f), new Vector2(1500f, 90f));
+        sub.color = highlight;
+
+        Img("PadBase", content, disc, new Color(1f, 1f, 1f, 0.12f), c, new Vector2(DragReach * 2f + 110f, DragReach * 2f + 110f));
+        Img("PressRing", content, ring, new Color(1f, 1f, 1f, 0.75f), c, new Vector2(120f, 120f));
+
+        // an arrow and a word at each side of the dot's way
+        float arrow = DragReach + 110f;
+        Arrow(c + new Vector2(-arrow, 0f), 90f);                 // left
+        Arrow(c + new Vector2(arrow, 0f), -90f);                 // right
+        Arrow(c + new Vector2(0f, arrow), 180f);                 // up
+        Arrow(c + new Vector2(0f, -arrow), 0f);                  // down
+        Text("Dir", content, I18n.Tr("DIRECTION"), 46, c + new Vector2(-arrow - 150f, -70f), new Vector2(420f, 70f));
+        Text("Dir2", content, I18n.Tr("DIRECTION"), 46, c + new Vector2(arrow + 150f, -70f), new Vector2(420f, 70f));
+        Text("Strong", content, I18n.Tr("STRONG"), 50, c + new Vector2(0f, arrow + 80f), new Vector2(500f, 80f)).color = highlight;
+        Text("Soft", content, I18n.Tr("SOFT"), 50, c + new Vector2(0f, -arrow - 80f), new Vector2(500f, 80f)).color = highlight;
+
+        var line = Img("Trail", content, rounded, new Color(1f, 1f, 1f, 0.55f), c, new Vector2(10f, 10f));
+        line.type = Image.Type.Sliced;
+        trail = line.rectTransform;
+        var dot = Img("Pointer", content, disc, highlight, c, new Vector2(78f, 78f));
+        dragDot = dot.rectTransform;
+
+        hint = Text("Hint", content, mobile ? I18n.Tr("TAP TO START") : I18n.Tr("CLICK TO START"), 46, new Vector2(0f, -size.y * 0.46f), new Vector2(1200f, 80f));
+        hint.color = new Color(1f, 1f, 1f, 0.8f);
+    }
+
+    void Arrow(Vector2 pos, float degrees)
+    {
+        var t = Text("Arrow", content, "\u25BC", 64, pos, new Vector2(120f, 90f));
+        t.color = highlight;
+        t.rectTransform.localRotation = Quaternion.Euler(0f, 0f, degrees);
+    }
+
+    void AnimateBaseline(float t)
+    {
+        if (dragDot == null || trail == null) return;
+        const float step = 0.85f;
+        float u = (t / step) % (DragPath.Length - 1);
+        int i = Mathf.Min((int)u, DragPath.Length - 2);
+        float k = Mathf.SmoothStep(0f, 1f, u - i);
+        Vector2 off = Vector2.Lerp(DragPath[i], DragPath[i + 1], k) * DragReach;
+        dragDot.anchoredPosition = padCentre + off;
+        float len = off.magnitude;
+        trail.sizeDelta = new Vector2(Mathf.Max(10f, len), 10f);
+        trail.anchoredPosition = padCentre + off * 0.5f;
+        trail.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(off.y, off.x) * Mathf.Rad2Deg);
+        dragDot.localScale = Vector3.one * (1f + 0.08f * Mathf.Sin(t * 8f));
     }
 
     // W / A S D keys with MOVE above.

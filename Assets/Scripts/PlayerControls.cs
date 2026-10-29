@@ -50,6 +50,27 @@ public class PlayerControls : MonoBehaviour
     public Vector2 Move { get; private set; }
     public bool Visible => visible;
 
+    // Tap mode (the baseline style): no stick and no button; the whole screen is one pad. The player presses (a touch, a click), moves the pointer while it is
+    // down (the direction and the strength of the shot are set by how far and which way it moves from where it was pressed) and lets go: the release is the swing.
+    public bool TapMode
+    {
+        get { return tapMode; }
+        set { if (tapMode == value) return; tapMode = value; if (stickBase != null) ApplyLayout(); }
+    }
+    // The press was let go since the last time this was read: `drag` is how the pointer moved between the press and the release, in pixels (x to the
+    // right, y up). Space / J make a plain tap (no movement).
+    public bool ConsumeTap(out Vector2 drag)
+    {
+        drag = Vector2.zero;
+        if (tapped) { tapped = false; drag = tapDrag; return true; }
+        if (visible && (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.J))) return true;
+        return false;
+    }
+
+    bool tapMode, tapped;
+    Vector2 tapOrigin, tapDrag;
+    int tapPointer = int.MinValue;
+
     bool visible, swingQueued, mobile;
     RectTransform root, stickBase, knob, button, stickPad, swingPad;
     Image baseImage, knobImage, buttonImage, buttonRing;
@@ -81,8 +102,21 @@ public class PlayerControls : MonoBehaviour
         if (ForceMobile) v = true;
         if (visible == v) return;
         visible = v;
-        if (root != null) root.gameObject.SetActive(v);
-        if (!v) { stickPointer = int.MinValue; stickValue = Vector2.zero; Move = Vector2.zero; swingQueued = false; }
+        // The controls are never switched off (that would drop a finger that is still on the stick: it would have to touch again): they are only
+        // hidden, and while they are, the stick and the swing are ignored. A finger that stays down goes on moving the character afterwards.
+        ApplyVisibility();
+        if (!v) { swingQueued = false; tapped = false; }
+    }
+
+    CanvasGroup group;
+    void ApplyVisibility()
+    {
+        if (root == null) return;
+        if (group == null && !root.TryGetComponent(out group)) group = root.gameObject.AddComponent<CanvasGroup>();
+        group.alpha = visible ? 1f : 0f;
+        // Hidden controls must not catch touches or clicks (the menu's own taps).
+        if (stickPad != null) stickPad.GetComponent<Image>().raycastTarget = visible;
+        if (swingPad != null) swingPad.GetComponent<Image>().raycastTarget = visible;
     }
 
     void Build(TMP_FontAsset font, Material fontMaterial)
@@ -142,18 +176,30 @@ public class PlayerControls : MonoBehaviour
         ShowStickAt(restingPlace, false);
         mobile = Application.isMobilePlatform || ForceMobile;
         ApplyLayout();
-        root.gameObject.SetActive(false);
+        ApplyVisibility();
     }
 
     // The phone layout draws the stick and the button and splits the screen in two; the computer layout draws nothing and any click is a swing.
     void ApplyLayout()
     {
-        stickBase.gameObject.SetActive(mobile);
-        button.gameObject.SetActive(mobile);
-        stickPad.gameObject.SetActive(mobile);
-        SetArea(swingPad, mobile ? new Vector2(1f - swingArea.x, 0f) : Vector2.zero, mobile ? new Vector2(1f, swingArea.y) : Vector2.one);
+        bool sticks = mobile && !tapMode;   // the stick and the button are not there in tap mode
+        stickBase.gameObject.SetActive(sticks);
+        button.gameObject.SetActive(sticks);
+        stickPad.gameObject.SetActive(sticks);
+        SetArea(swingPad, sticks ? new Vector2(1f - swingArea.x, 0f) : Vector2.zero, sticks ? new Vector2(1f, swingArea.y) : Vector2.one);
         SetArea(stickPad, Vector2.zero, new Vector2(stickArea.x, stickArea.y));
-        if (!mobile) { stickPointer = int.MinValue; stickValue = Vector2.zero; }
+        if (!sticks) { stickPointer = int.MinValue; stickValue = Vector2.zero; }
+    }
+
+    // ---- tap mode: the pad is touched / dragged / released ----
+    void TapDown(PointerEventData e) { tapPointer = e.pointerId; tapOrigin = e.position; }
+    void TapDrag(PointerEventData e) { }
+    void TapUp(PointerEventData e)
+    {
+        if (e.pointerId != tapPointer) return;
+        tapPointer = int.MinValue;
+        tapped = true;
+        tapDrag = e.position - tapOrigin;
     }
 
     static void SetArea(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax)
@@ -218,8 +264,7 @@ public class PlayerControls : MonoBehaviour
 
     void StickDown(PointerEventData e)
     {
-        if (stickPointer != int.MinValue) return;
-        stickPointer = e.pointerId;
+        stickPointer = e.pointerId; // a new touch always takes the stick over (a finger that was lost is not waited for)
         Vector2 p = ToCanvas(e.position);
         p.x = Mathf.Max(p.x, stickRadius + 20f);
         p.y = Mathf.Max(p.y, stickRadius + 20f);
@@ -242,6 +287,14 @@ public class PlayerControls : MonoBehaviour
         stickPointer = int.MinValue;
         stickValue = Vector2.zero;
         ShowStickAt(restingPlace, false);
+    }
+
+    bool HeldPointerAlive()
+    {
+        if (stickPointer == -1) return Input.GetMouseButton(0);      // the mouse (left button)
+        if (stickPointer < 0) return true;                           // other mouse buttons: not tracked
+        for (int i = 0; i < Input.touchCount; i++) if (Input.GetTouch(i).fingerId == stickPointer) return true;
+        return false;
     }
 
     void SwingDown() { if (visible) { swingQueued = true; pressGlow = 1f; } }
@@ -267,6 +320,14 @@ public class PlayerControls : MonoBehaviour
         }
         Move = visible ? v : Vector2.zero;
 
+        // The finger that holds the stick is still down? (If its release was lost, the stick lets go by itself.)
+        if (stickPointer != int.MinValue && !HeldPointerAlive())
+        {
+            stickPointer = int.MinValue;
+            stickValue = Vector2.zero;
+            ShowStickAt(restingPlace, false);
+        }
+
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.J)) pressGlow = 1f;
         pressGlow = Mathf.MoveTowards(pressGlow, 0f, Time.unscaledDeltaTime * 4f);
         if (buttonImage != null)
@@ -285,9 +346,11 @@ public class PlayerControls : MonoBehaviour
         public void OnPointerUp(PointerEventData e) { owner.StickUp(e); }
     }
 
-    class SwingPad : MonoBehaviour, IPointerDownHandler
+    class SwingPad : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
     {
         public PlayerControls owner;
-        public void OnPointerDown(PointerEventData e) { owner.SwingDown(); }
+        public void OnPointerDown(PointerEventData e) { if (owner.tapMode) owner.TapDown(e); else owner.SwingDown(); }
+        public void OnDrag(PointerEventData e) { if (owner.tapMode) owner.TapDrag(e); }
+        public void OnPointerUp(PointerEventData e) { if (owner.tapMode) owner.TapUp(e); }
     }
 }
