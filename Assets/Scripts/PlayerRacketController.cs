@@ -139,18 +139,14 @@ public class PlayerRacketController : RacketController
     void EnsureCharacter()
     {
         if (character != null || !WantsCharacter) return;
-        var model = Resources.Load<GameObject>("PlayerCharacterModel");
-        if (model == null) return;
-        var go = new GameObject("PlayerCharacter");
-        character = go.AddComponent<PlayerCharacter>();
-        character.Setup(model, Racket);
+        character = PlayerCharacter.Create(Racket, false, Color.white); // the one in the scene, or a new one
+        if (character == null) return;
+        character.handOffset = handOffset;
         Racket.hitRadius = buttonHitRadius;
         var hud = FindFirstObjectByType<HudView>();
         TMPro.TMP_FontAsset font = hud != null && hud.winLine1 != null ? hud.winLine1.font : null;
         Material mat = hud != null && hud.winLine1 != null ? hud.winLine1.fontSharedMaterial : null;
         controls = PlayerControls.Create(font, mat);
-        // The racket body is only the place where the ball is hit: it is not drawn, and its shadow is not needed (the character has its own).
-        foreach (var sh in FindObjectsByType<RacketShadow>(FindObjectsSortMode.None)) if (sh.racket == Racket) sh.gameObject.SetActive(false);
     }
 
     void OnDestroy()
@@ -162,7 +158,7 @@ public class PlayerRacketController : RacketController
     // The feet go where the racket is, minus the grip.
     void PlaceFeet(float groundY)
     {
-        feet = new Vector3(Racket.Position.x - handOffset.x, groundY, Racket.Position.z - handOffset.y);
+        feet = character != null ? character.FeetFor(Racket.Position, groundY) : new Vector3(Racket.Position.x - handOffset.x, groundY, Racket.Position.z - handOffset.y);
         if (character != null) character.transform.position = feet;
     }
 
@@ -179,7 +175,7 @@ public class PlayerRacketController : RacketController
             PlaceFeet(0f);
             character.CancelSwing();
             character.Place(feet);
-            character.SnapFacing(0f);
+            character.SnapFacing();
             character.LookAt(Vector3.zero, false);
             if (controls != null) controls.SetVisible(false);
         }

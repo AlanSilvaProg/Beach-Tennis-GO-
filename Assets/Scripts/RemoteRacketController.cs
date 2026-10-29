@@ -17,7 +17,12 @@ public class RemoteRacketController : PlayerRacketController
     protected override bool WantsCharacter => false;
     public override bool UsesButton => true;
     protected override Vector2 SwingStick => remoteStick;
-    public void RemoteSwing(Vector2 stick) { remoteStick = stick; swingStart = Time.time; swingOpen = true; }
+    public void RemoteSwing(Vector2 stick)
+    {
+        remoteStick = stick; swingStart = Time.time; swingOpen = true;
+        var body = PlayerCharacter.For(Racket);
+        if (body != null) body.Swing();
+    }
 
     // The other player's swings are judged by the same rules as ours (depth, reach, serve, grades), whatever this object was saved with.
     void Start()

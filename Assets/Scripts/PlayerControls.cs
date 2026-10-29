@@ -3,10 +3,14 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-// The player's controls on the screen: a joystick (left side) that runs the character and a swing button (right side).
-//  - The joystick is "floating": it appears where the thumb lands in the left part of the screen and the knob follows the thumb.
-//  - The swing is a button at the bottom right; a touch anywhere in the right part of the screen counts as pressing it, so there is no need to aim.
-//  - On a computer the arrows / WASD run and Space (or J) swings. Both ways work at once.
+// The player's controls.
+//  - Computer (mouse and keyboard): nothing is drawn. W A S D (or the arrows) run and a click anywhere on the screen (or Space / J) swings.
+//  - Phone (touch): a joystick on the left half that runs the character and a swing button on the right half.
+//    The joystick is "floating": it appears where the thumb lands and the knob follows the thumb. A touch anywhere in the right half is a swing,
+//    so there is no need to aim at the button.
+// A computer that turns out to have a touch screen switches to the phone layout at the first touch.
+// Debug: ForceMobile shows the phone layout (always visible, also in the menu) with the mouse acting as a finger. In the editor it is set by
+// the menu Tools / Beach Tennis GO / Debug mobile controls.
 // Everything is made at run time on its own overlay canvas, below the game's own HUD (so the buttons of the HUD stay on top), nothing to wire in the scene.
 public class PlayerControls : MonoBehaviour
 {
@@ -27,15 +31,31 @@ public class PlayerControls : MonoBehaviour
     [Tooltip("Share of the screen width, from the right, in which a touch counts as the swing button, and share of the height, from the bottom.")]
     public Vector2 swingArea = new Vector2(0.45f, 0.72f);
 
+    // Show (and use) the phone layout whatever the device. In the editor it follows the menu item.
+    public static bool ForceMobile
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return UnityEditor.EditorPrefs.GetBool(DebugPref, false);
+#else
+            return false;
+#endif
+        }
+    }
+    public const string DebugPref = "BeachTennisGO.DebugMobileControls";
+    public bool Mobile => mobile;
+
     // -1..1 on both axes: x to the right, y towards the net.
     public Vector2 Move { get; private set; }
     public bool Visible => visible;
 
-    bool visible, swingQueued;
-    RectTransform root, stickBase, knob, button;
+    bool visible, swingQueued, mobile;
+    RectTransform root, stickBase, knob, button, stickPad, swingPad;
     Image baseImage, knobImage, buttonImage, buttonRing;
     TextMeshProUGUI label;
     Sprite disc, ring;
+    bool touched;
     int stickPointer = int.MinValue;
     Vector2 stickCentre, stickValue;
     float pressGlow;
@@ -58,6 +78,7 @@ public class PlayerControls : MonoBehaviour
 
     public void SetVisible(bool v)
     {
+        if (ForceMobile) v = true;
         if (visible == v) return;
         visible = v;
         if (root != null) root.gameObject.SetActive(v);
@@ -82,31 +103,34 @@ public class PlayerControls : MonoBehaviour
         disc = MakeSprite(128, (r) => Mathf.Clamp01((1f - r) * 14f));
         ring = MakeSprite(128, (r) => Mathf.Clamp01(1f - Mathf.Abs(r - 0.92f) / 0.08f));
 
-        // Touch areas (invisible): they catch the thumbs anywhere inside them.
-        var stickPad = MakeArea("StickArea", new Vector2(0f, 0f), new Vector2(stickArea.x, stickArea.y));
+        // Touch areas (invisible): they catch the thumbs / the click anywhere inside them. Their size depends on the layout (ApplyLayout).
+        stickPad = MakeArea("StickArea");
         stickPad.gameObject.AddComponent<StickPad>().owner = this;
-        var swingPad = MakeArea("SwingArea", new Vector2(1f - swingArea.x, 0f), new Vector2(1f, swingArea.y));
+        swingPad = MakeArea("SwingArea");
         swingPad.gameObject.AddComponent<SwingPad>().owner = this;
 
-        stickBase = MakeImage("StickBase", disc, new Vector2(0f, 0f), new Vector2(stickRadius * 2.3f, stickRadius * 2.3f), new Color(1f, 1f, 1f, 0.16f), out baseImage);
-        var baseRing = MakeImage("Ring", ring, Vector2.zero, new Vector2(stickRadius * 2.3f, stickRadius * 2.3f), new Color(1f, 1f, 1f, 0.5f), out var _r);
-        baseRing.SetParent(stickBase, false);
-        baseRing.anchoredPosition = Vector2.zero;
-        knob = MakeImage("Knob", disc, new Vector2(0f, 0f), new Vector2(stickRadius * 1.15f, stickRadius * 1.15f), new Color(1f, 1f, 1f, 0.55f), out knobImage);
-        knob.SetParent(stickBase, false);
+        // Every picture is centred on its parent (anchors in the middle), so the stick's ring, disc and knob and the button's ring share one centre.
+        stickBase = MakeImage("StickBase", root, disc, new Vector2(0f, 0f), new Vector2(stickRadius * 2.3f, stickRadius * 2.3f), new Color(1f, 1f, 1f, 0.16f), out baseImage);
+        MakeImage("Ring", stickBase, ring, new Vector2(0.5f, 0.5f), new Vector2(stickRadius * 2.3f, stickRadius * 2.3f), new Color(1f, 1f, 1f, 0.5f), out var _r);
+        knob = MakeImage("Knob", stickBase, disc, new Vector2(0.5f, 0.5f), new Vector2(stickRadius * 1.15f, stickRadius * 1.15f), new Color(1f, 1f, 1f, 0.55f), out knobImage);
 
-        button = MakeImage("SwingButton", disc, new Vector2(1f, 0f), new Vector2(buttonSize, buttonSize), new Color(1f, 0.85f, 0.25f, 0.55f), out buttonImage);
+        button = MakeImage("SwingButton", root, disc, new Vector2(1f, 0f), new Vector2(buttonSize, buttonSize), new Color(1f, 0.8f, 0.2f, 0.82f), out buttonImage);
         button.anchoredPosition = new Vector2(-buttonPlace.x, buttonPlace.y);
-        var br = MakeImage("Ring", ring, Vector2.zero, new Vector2(buttonSize, buttonSize), new Color(1f, 1f, 1f, 0.75f), out buttonRing);
-        br.SetParent(button, false);
-        br.anchoredPosition = Vector2.zero;
+        MakeImage("Ring", button, ring, new Vector2(0.5f, 0.5f), new Vector2(buttonSize, buttonSize), new Color(1f, 1f, 1f, 0.75f), out buttonRing);
 
+        // The picture of the button: a racket with the trail of its swing (the text is only there if the picture is missing).
+        var hitIcon = Resources.Load<Sprite>("hit-icon");
+        if (hitIcon != null)
+        {
+            MakeImage("Icon", button, hitIcon, new Vector2(0.5f, 0.5f), new Vector2(buttonSize * 0.92f, buttonSize * 0.92f), Color.white, out var _icon);
+            ((RectTransform)button.Find("Icon")).anchoredPosition = Vector2.zero;
+        }
         var textGo = new GameObject("Label", typeof(RectTransform));
         textGo.transform.SetParent(button, false);
         label = textGo.AddComponent<TextMeshProUGUI>();
         if (font != null) label.font = font;
         if (fontMaterial != null) label.fontSharedMaterial = fontMaterial;
-        label.text = I18n.Tr("HIT");
+        label.text = hitIcon != null ? "" : I18n.Tr("HIT");
         label.alignment = TextAlignmentOptions.Center;
         label.fontSize = 52;
         label.color = Color.white;
@@ -116,25 +140,42 @@ public class PlayerControls : MonoBehaviour
         lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = lrt.offsetMax = Vector2.zero;
 
         ShowStickAt(restingPlace, false);
+        mobile = Application.isMobilePlatform || ForceMobile;
+        ApplyLayout();
         root.gameObject.SetActive(false);
     }
 
-    RectTransform MakeArea(string name, Vector2 anchorMin, Vector2 anchorMax)
+    // The phone layout draws the stick and the button and splits the screen in two; the computer layout draws nothing and any click is a swing.
+    void ApplyLayout()
+    {
+        stickBase.gameObject.SetActive(mobile);
+        button.gameObject.SetActive(mobile);
+        stickPad.gameObject.SetActive(mobile);
+        SetArea(swingPad, mobile ? new Vector2(1f - swingArea.x, 0f) : Vector2.zero, mobile ? new Vector2(1f, swingArea.y) : Vector2.one);
+        SetArea(stickPad, Vector2.zero, new Vector2(stickArea.x, stickArea.y));
+        if (!mobile) { stickPointer = int.MinValue; stickValue = Vector2.zero; }
+    }
+
+    static void SetArea(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax)
+    {
+        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.offsetMin = rt.offsetMax = Vector2.zero;
+    }
+
+    RectTransform MakeArea(string name)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
         go.transform.SetParent(root, false);
         var rt = (RectTransform)go.transform;
-        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.offsetMin = rt.offsetMax = Vector2.zero;
         var img = go.GetComponent<Image>();
         img.color = new Color(0f, 0f, 0f, 0f);
         img.raycastTarget = true;
         return rt;
     }
 
-    RectTransform MakeImage(string name, Sprite sprite, Vector2 anchor, Vector2 size, Color color, out Image image)
+    RectTransform MakeImage(string name, Transform parent, Sprite sprite, Vector2 anchor, Vector2 size, Color color, out Image image)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(root, false);
+        go.transform.SetParent(parent, false);
         var rt = (RectTransform)go.transform;
         rt.anchorMin = rt.anchorMax = anchor;
         rt.pivot = new Vector2(0.5f, 0.5f);
@@ -207,6 +248,11 @@ public class PlayerControls : MonoBehaviour
 
     void Update()
     {
+        // A touch on a device that was taken for a computer: from now on it is a phone.
+        if (Input.touchCount > 0) touched = true;
+        bool wantMobile = Application.isMobilePlatform || ForceMobile || touched;
+        if (wantMobile != mobile) { mobile = wantMobile; ApplyLayout(); }
+
         // The stick (when it is held) or the keyboard.
         Vector2 v = stickValue;
         if (v.sqrMagnitude < 1e-4f)
@@ -225,7 +271,7 @@ public class PlayerControls : MonoBehaviour
         pressGlow = Mathf.MoveTowards(pressGlow, 0f, Time.unscaledDeltaTime * 4f);
         if (buttonImage != null)
         {
-            buttonImage.color = Color.Lerp(new Color(1f, 0.85f, 0.25f, 0.55f), new Color(1f, 0.95f, 0.5f, 0.95f), pressGlow);
+            buttonImage.color = Color.Lerp(new Color(1f, 0.8f, 0.2f, 0.82f), new Color(1f, 0.92f, 0.45f, 1f), pressGlow);
             button.localScale = Vector3.one * (1f - 0.1f * pressGlow);
         }
     }

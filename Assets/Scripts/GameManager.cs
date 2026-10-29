@@ -212,15 +212,82 @@ public class GameManager : MonoBehaviour
         if (!loadedReported) { loadedReported = true; PokiEvents.Track("game", "loaded", "language", I18n.Code); } // once, not at every scene
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (shotFx == null) shotFx = hud != null && hud.winLine1 != null ? ShotFx.Create(gameObject, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : ShotFx.Create(gameObject, null, null);
+        if (!onlineScene && tutorial == null)
+            tutorial = hud != null && hud.winLine1 != null ? TutorialOverlay.Create(this, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : TutorialOverlay.Create(this, null, null);
+        if (pauseMenu == null)
+            pauseMenu = hud != null && hud.winLine1 != null ? PauseMenu.Create(this, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : PauseMenu.Create(this, null, null);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
+        EnsureOpponentBody(opponent);
         ResetRackets();
         ball.SetVisible(false);
     }
 
+    // The CPU and the other online player have a body too (the one in the scene, or one made now); the human player's controller makes its own.
+    void EnsureOpponentBody(RacketController c)
+    {
+        if (c == null) return;
+        var human = c as PlayerRacketController;
+        if (human != null && !(human is RemoteRacketController)) return;
+        PlayerCharacter.Create(c.Racket, true, new Color(1f, 0.82f, 0.8f));
+    }
+
+    // The opponent's body swings when the opponent hits (a person's swing is shown when the button is pressed, not here).
+    void OpponentSwing(RacketController c)
+    {
+        if (c is PlayerRacketController) return;
+        var body = PlayerCharacter.For(c.Racket);
+        if (body != null) body.Swing();
+    }
+
+    // ---------- pause (offline matches only) ----------
+    PauseMenu pauseMenu;
+    TutorialOverlay tutorial;
+    static bool tutorialSeen;      // the controls tutorial opens at the first training match of a session
+    public bool Paused { get; private set; }
+    // The controls tutorial is open: the game stands still behind it.
+    public bool TutorialHold { get; private set; }
+
+    public void ShowTutorial() { if (tutorial != null) tutorial.Show(); }
+
+    // Called by the tutorial: stops / restarts the time (and the Poki gameplay events) while it is open.
+    public void SetTutorialHold(bool hold)
+    {
+        if (hold == TutorialHold) return;
+        TutorialHold = hold;
+        Time.timeScale = hold ? 0f : 1f;
+        if (poki != null) { if (hold) poki.GameplayStop(); else if (MatchOn) poki.GameplayStart(); }
+    }
+    // The pause button is there while an offline match is on (not in the menu, the result screens or an ad, never online).
+    public bool CanPause => !onlineScene && Role == NetRole.None && (state == State.Serving || state == State.Rally || state == State.PointOver) && !PokiService.AdPlaying && !TutorialHold;
+
+    // Stops the game: the time (so the ball, the AI, the timers and the animations), the sounds (the music goes on) and the Poki gameplay events.
+    public void SetPaused(bool paused)
+    {
+        if (paused == Paused || (paused && !CanPause)) return;
+        Paused = paused;
+        Time.timeScale = paused ? 0f : 1f;
+        AudioListener.pause = paused;
+        var music = FindFirstObjectByType<MusicPlayer>();
+        if (music != null) { var src = music.GetComponent<AudioSource>(); if (src != null) src.ignoreListenerPause = true; }
+        if (poki != null) { if (paused) poki.GameplayStop(); else poki.GameplayStart(); }
+        PokiEvents.Track("pause", paused ? "open" : "resume", "level", level);
+    }
+
+    // The EXIT GAME button of the pause window: the match is left and the menu comes back.
+    public void ExitToMenu()
+    {
+        PokiEvents.Track("pause", "exit", "level", level);
+        SetPaused(false);
+        ReturnToMenu();
+    }
+
+    void OnDisable() { if (Paused || TutorialHold) { Time.timeScale = 1f; AudioListener.pause = false; Paused = false; TutorialHold = false; } } // never leave the time stopped behind
+
     void Update()
     {
+        if (Paused || TutorialHold) return;
         if (Role == NetRole.Guest) { GuestUpdate(); return; }
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
@@ -474,6 +541,7 @@ public class GameManager : MonoBehaviour
         if (opponent == ai) ai.SetLevel(level);
         ResetRackets();
         PrepareServe();
+        if (!Online && Role == NetRole.None && !tutorialSeen && tutorial != null) { tutorialSeen = true; tutorial.Show(); } // how to move and how to hit
     }
 
     public int TrophiesFor(int forLevel) { return Mathf.Clamp(firstLevelTrophies + Mathf.Max(0, forLevel - 1), 1, Mathf.Max(1, maxTrophies)); }
@@ -640,6 +708,7 @@ public class GameManager : MonoBehaviour
         Vector3 incoming = ball.Velocity, contact = ball.Position;
         ctrl.Racket.HitCenter = SweptCentre(ctrl.Racket, contact); // where on its path the racket met the ball
         ball.Velocity = ctrl.ComputeShot(this, contact);
+        OpponentSwing(ctrl);
         lastHitter = side;
         hitsInPoint++;
         rallyTime = 0f; // the timeout counts from the last hit, not from the serve (a long rally is not a stuck ball)
@@ -862,13 +931,14 @@ public class GameManager : MonoBehaviour
     static bool loadedReported, urlModeHandled;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { loadedReported = false; urlModeHandled = false; } // static state survives a Play without domain reload
+    static void ResetStatics() { loadedReported = false; urlModeHandled = false; tutorialSeen = false; } // static state survives a Play without domain reload
 
     // Online match with `other` as the far-side racket (a RemoteRacketController for a real player, `ai` for the fake opponent).
     public void BeginOnline(NetRole role, RacketController other, string myName, string theirName)
     {
         Role = role;
         opponent = other;
+        EnsureOpponentBody(other);
         localName = myName; opponentName = theirName;
         namesSet = false;
         peerGone = false;
@@ -986,6 +1056,7 @@ public class GameManager : MonoBehaviour
         if (shotFx == null) return;
         shotFx.Hit(ball.Position, quality, speed, ball.Velocity, side == 0);
         (side == 0 ? player : opponent).Racket.Punch(quality == ShotQuality.Weak ? 0.2f : shotFx.Power(speed));
+        if (side != 0) OpponentSwing(opponent); // (the guest's own swing is shown when its button is pressed)
         if (side != 0) return;
         if (quality == ShotQuality.Perfect) stats.perfectShots++;
         else if (quality == ShotQuality.VeryGood) stats.greatShots++;
