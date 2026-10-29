@@ -26,6 +26,10 @@ public class PlayerRacketController : RacketController
     [Tooltip("A ball that would land less than this far past the net (m) is not a shot that crosses: it hits the net instead.")]
     public float minClearance = 0.7f;
 
+    [Header("Serve")]
+    [Tooltip("A serve is never a net or a short ball: whatever the swipe, it has at least this power (0-1). 0.5 is a medium ball, 1 the deepest.")]
+    [Range(0f, 1f)] public float serveMinPower = 0.5f;
+
     [Header("Shot grades (speed towards the net, m/s, at the moment of contact: the same swipe that sets the depth)")]
     [Tooltip("STRONG: a medium swipe. Gets the bigger burst, no word.")]
     public float strongSwipeSpeed = 3.5f;
@@ -138,15 +142,18 @@ public class PlayerRacketController : RacketController
         float maxDepth = court.halfLength - landMargin;
         float landX = Mathf.Clamp(sideSpeed * sideSwipeFactor - dx * offCentreFactor, -maxX, maxX);
 
+        // The serve cannot fail or be short: no net, no drop shot, no limit on the reach, and a medium ball at the least.
+        bool serve = gm.IsServing;
         // Swinging backwards: the ball only reaches the net, hits it and drops on this side.
-        if (forwardSpeed < -backwardNetSpeed) return NetShot(gm, contact, landX);
+        if (!serve && forwardSpeed < -backwardNetSpeed) return NetShot(gm, contact, landX);
 
         float power = Mathf.Pow(Mathf.Clamp01(forwardSpeed / Mathf.Max(0.1f, fullPowerSpeed)), powerCurve);
+        if (serve) power = Mathf.Max(power, serveMinPower);
         // A gentle swipe cannot send the ball far: from near the net it still drops over, from further back it falls short and dies at the net.
-        float reach = Mathf.Lerp(stillReach, fullReach, power);
+        float reach = serve ? fullReach : Mathf.Lerp(stillReach, fullReach, power);
         float fromNet = Mathf.Abs(contact.z);
         if (reach - fromNet < minClearance) return NetShot(gm, contact, landX);
-        if (power <= dropShotMaxPower && Mathf.Abs(contact.z) <= dropShotDistance)
+        if (!serve && power <= dropShotMaxPower && Mathf.Abs(contact.z) <= dropShotDistance)
         {
             float dropX = Mathf.Clamp(landX, -maxX, maxX);
             return gm.Ball.SolveHit(contact, dropX, -Racket.SideSign * dropShotDepth, court.groundY + gm.Ball.radius, dropShotFlight, gm.Net);

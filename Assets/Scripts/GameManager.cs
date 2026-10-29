@@ -162,6 +162,8 @@ public class GameManager : MonoBehaviour
     bool serveArmed;
     float servePrevDz = float.NaN; // racket-to-ball distance along z last frame (NaN = it was out of reach)
 
+    // The ball is waiting for the server's racket (the next hit is the serve).
+    public bool IsServing => state == State.Serving;
     public Ball Ball => ball;
     public Net Net => net;
     public AiRacketController Ai => ai;
