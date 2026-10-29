@@ -95,6 +95,8 @@ public class Racket : MonoBehaviour
     Vector3 poseOrigin;
 
     public bool Posing => pose != Pose.None;
+    // What the end-of-match pose is, for a character that plays it with its own body: 0 none, 1 celebrate, 2 fall.
+    public int PoseKind => (int)pose;
     public void Celebrate() { pose = Pose.Celebrate; poseTime = 0f; poseOrigin = transform.position; }
     public void Fall() { pose = Pose.Fall; poseTime = 0f; poseOrigin = transform.position; }
     public void ClearPose()
@@ -162,6 +164,7 @@ public class Racket : MonoBehaviour
         get
         {
             float now = Time.time;
+            if (now <= forcedSwingUntil) return forcedSwing;
             Vector3 mean = Vector3.zero;
             int n = 0;
             for (int i = 0; i < historyCount; i++)
@@ -184,6 +187,16 @@ public class Racket : MonoBehaviour
         }
     }
 
+    // A swing that is not read from the movement: the player's swing button (the controller says how fast and which way) is the swing, for as
+    // long as it lasts.
+    Vector3 forcedSwing;
+    float forcedSwingUntil = -1f;
+    public void ForceSwing(Vector3 velocity, float seconds) { forcedSwing = velocity; forcedSwingUntil = Time.time + seconds; }
+
+    // True when a character holds the racket model in its hand: the racket body then only marks where the hit happens, and does not
+    // move, scale or squash the model.
+    [HideInInspector] public bool modelDetached;
+
     void OnValidate() { ApplyModel(); }
     void Awake() { ApplyModel(); lastPos = transform.position; }
 
@@ -194,7 +207,7 @@ public class Racket : MonoBehaviour
 
     void ApplyPunch()
     {
-        if (model == null || punchTime > PunchDuration + 0.1f) return;
+        if (model == null || modelDetached || punchTime > PunchDuration + 0.1f) return;
         punchTime += Time.deltaTime;
         float k = Mathf.Clamp01(punchTime / PunchDuration);
         float s = 1f + punch * 0.35f * Mathf.Sin(k * Mathf.PI) * (1f - k * 0.4f);
@@ -204,7 +217,7 @@ public class Racket : MonoBehaviour
 
     void ApplyModel()
     {
-        if (model == null) return;
+        if (model == null || modelDetached) return;
         model.localScale = Vector3.one * modelScale;
         model.localPosition = new Vector3(0f, -headCenter * modelScale, 0f);
     }

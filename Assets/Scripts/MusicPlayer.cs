@@ -37,18 +37,30 @@ public class MusicPlayer : MonoBehaviour
     // The track was made by a download (about 23 MB decoded): free it when the scene goes, the next scene loads it again.
     void OnDestroy() { if (source != null && source.clip != null) Destroy(source.clip); }
 
+    // The browser can fail to decode the track (a download that was cut short, little memory: "Loading FSB failed for audio clip"). The clip then
+    // reports Failed instead of playing, so it is dropped and the download tried again, a few times; if it never works the game goes on without music.
+    const int Attempts = 3;
+
     IEnumerator Load()
     {
         string path = Application.streamingAssetsPath + "/" + File;
         string url = path.Contains("://") ? path : new Uri(path).AbsoluteUri;
-        using (var req = UnityWebRequestMultimedia.GetAudioClip(url, AudioType.MPEG))
+        for (int attempt = 0; attempt < Attempts; attempt++)
         {
-            yield return req.SendWebRequest();
-            if (req.result != UnityWebRequest.Result.Success) yield break; // no music: the game goes on without it
-            var clip = DownloadHandlerAudioClip.GetContent(req);
-            clip.name = "music";
-            source.clip = clip;
-            source.Play();
+            if (attempt > 0) yield return new WaitForSecondsRealtime(4f * attempt);
+            using (var req = UnityWebRequestMultimedia.GetAudioClip(url, AudioType.MPEG))
+            {
+                yield return req.SendWebRequest();
+                if (req.result != UnityWebRequest.Result.Success) continue;
+                var clip = DownloadHandlerAudioClip.GetContent(req);
+                if (clip == null) continue;
+                while (clip.loadState == AudioDataLoadState.Loading) yield return null;
+                if (clip.loadState != AudioDataLoadState.Loaded) { Destroy(clip); continue; }
+                clip.name = "music";
+                source.clip = clip;
+                source.Play();
+                yield break;
+            }
         }
     }
 

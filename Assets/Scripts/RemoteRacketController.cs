@@ -11,6 +11,13 @@ public class RemoteRacketController : PlayerRacketController
 
     Vector3 target;
     bool hasTarget;
+    Vector2 remoteStick;
+
+    // The other player hits with a swing button too: the host is told when it is pressed (and where their stick is), and this racket swings then.
+    protected override bool WantsCharacter => false;
+    public override bool UsesButton => true;
+    protected override Vector2 SwingStick => remoteStick;
+    public void RemoteSwing(Vector2 stick) { remoteStick = stick; swingStart = Time.time; swingOpen = true; }
 
     // The other player's swings are judged by the same rules as ours (depth, reach, serve, grades), whatever this object was saved with.
     void Start()

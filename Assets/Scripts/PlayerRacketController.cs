@@ -1,9 +1,35 @@
 using UnityEngine;
 
-// Mouse / touch controlled racket. It only slides left/right and forward/back, inside the Racket's play area.
-// Forward swipe = depth (gentle: short, fast: to the far end), sideways swipe = angle, backwards = the ball dies at the net.
+// The human player. With a character (the normal case) the player runs a boy with a joystick and hits with a button:
+//  - The racket is held by the character: the Racket body (where the ball is hit) sits a little to the right of and in front of the feet.
+//  - Pressing the swing button hits a ball that is within reach at once; the stick, held at that moment, shapes the shot: towards the net = deeper
+//    and stronger, away = softer and shorter, sideways = the angle. A ball met cleanly (close to the racket, at a good height) with the stick
+//    forward is graded GREAT or PERFECT.
+// Without a character (the old way) it is a mouse / touch controlled racket that only slides left/right and forward/back inside the play area:
+// forward swipe = depth (gentle: short, fast: to the far end), sideways swipe = angle, backwards = the ball dies at the net.
 public class PlayerRacketController : RacketController
 {
+    [Header("Character (joystick + swing button)")]
+    [Tooltip("Run a character with a joystick and hit with a button. Off = the old mouse / touch racket.")]
+    public bool useCharacter = true;
+    [Tooltip("Running speed (m/s) at full stick and how fast it picks up and loses speed (m/s per second).")]
+    public float moveSpeed = 7f;
+    public float acceleration = 50f;
+    [Tooltip("Where the racket head is held, from the feet: to the right and towards the net (m).")]
+    public Vector2 handOffset = new Vector2(0.45f, 0.5f);
+    [Tooltip("Reach of the swing on the ground (m): a ball closer than this to the racket is hit when the button is pressed.")]
+    public float buttonHitRadius = 1.1f;
+    [Tooltip("The racket can hit from this long after the press (the moment the racket meets the ball) until this long (s).")]
+    public Vector2 contactWindow = new Vector2(0.06f, 0.3f);
+    [Tooltip("The swing button works again after this long (s).")]
+    public float swingCooldown = 0.35f;
+    [Tooltip("Power (0-1) of a shot with the stick pulled back and pushed fully forward; the stick at rest is in the middle of the two.")]
+    public Vector2 stickPower = new Vector2(0.3f, 1f);
+    [Tooltip("How much the off-centre position of the ball on the racket still moves the shot, compared with the old swipe (the button reach is wide).")]
+    [Range(0f, 1f)] public float buttonOffCentre = 0.3f;
+    [Tooltip("The serve: how far behind the ball the racket is kept (m, nearest and furthest).")]
+    public Vector2 serveStand = new Vector2(0.15f, 0.8f);
+
     [Header("Input")]
     public Camera cam;
     public Vector3 restPosition = new Vector3(0f, 1f, -4.8f);
@@ -81,15 +107,136 @@ public class PlayerRacketController : RacketController
     bool havePointer;       // false until the pointer has been read since the last time it was lost
     Vector2 lastPointer;
 
+    // ---------- character ----------
+    PlayerCharacter character;
+    PlayerControls controls;
+    Vector3 feet, runVelocity;
+    protected float swingStart = -10f;
+    protected bool swingOpen;
+    float lastTick = -10f;
+    // The character started a swing, with the stick as it was (the other player's copy of this racket is told).
+    public event System.Action<Vector2> SwingStarted;
+
+    protected virtual bool WantsCharacter => useCharacter;
+    // True when the shot is made with a button (the character's swing): hits then only happen during a swing.
+    public virtual bool UsesButton => character != null;
+    // Moment in the swing when a ball in reach is hit.
+    public virtual bool CanHitNow
+    {
+        get
+        {
+            if (!UsesButton) return true;
+            float t = Time.time - swingStart;
+            return swingOpen && t >= contactWindow.x && t <= contactWindow.y;
+        }
+    }
+    // The stick the shot is read from.
+    // It is the stick as it was when the button was pressed (not at the moment of contact a moment later).
+    protected virtual Vector2 SwingStick => stickAtPress;
+    Vector2 stickAtPress;
+    public PlayerCharacter Character => character;
+
+    void EnsureCharacter()
+    {
+        if (character != null || !WantsCharacter) return;
+        var model = Resources.Load<GameObject>("PlayerCharacterModel");
+        if (model == null) return;
+        var go = new GameObject("PlayerCharacter");
+        character = go.AddComponent<PlayerCharacter>();
+        character.Setup(model, Racket);
+        Racket.hitRadius = buttonHitRadius;
+        var hud = FindFirstObjectByType<HudView>();
+        TMPro.TMP_FontAsset font = hud != null && hud.winLine1 != null ? hud.winLine1.font : null;
+        Material mat = hud != null && hud.winLine1 != null ? hud.winLine1.fontSharedMaterial : null;
+        controls = PlayerControls.Create(font, mat);
+        // The racket body is only the place where the ball is hit: it is not drawn, and its shadow is not needed (the character has its own).
+        foreach (var sh in FindObjectsByType<RacketShadow>(FindObjectsSortMode.None)) if (sh.racket == Racket) sh.gameObject.SetActive(false);
+    }
+
+    void OnDestroy()
+    {
+        if (character != null) Destroy(character.gameObject);
+        if (controls != null) Destroy(controls.gameObject);
+    }
+
+    // The feet go where the racket is, minus the grip.
+    void PlaceFeet(float groundY)
+    {
+        feet = new Vector3(Racket.Position.x - handOffset.x, groundY, Racket.Position.z - handOffset.y);
+        if (character != null) character.transform.position = feet;
+    }
+
     public override void ResetPosition()
     {
         havePointer = false;
+        EnsureCharacter();
         Racket.MoveTo(restPosition);
         Racket.SnapSweep();
+        if (character != null)
+        {
+            runVelocity = Vector3.zero;
+            swingOpen = false;
+            PlaceFeet(0f);
+            character.CancelSwing();
+            character.Place(feet);
+            character.SnapFacing(0f);
+            character.LookAt(Vector3.zero, false);
+            if (controls != null) controls.SetVisible(false);
+        }
+    }
+
+    void LateUpdate()
+    {
+        // Tick only runs while a match is on and no ad plays: otherwise the controls go away.
+        if (controls != null && controls.Visible && Time.unscaledTime - lastTick > 0.25f) controls.SetVisible(false);
+    }
+
+    void TickCharacter(GameManager gm)
+    {
+        lastTick = Time.unscaledTime;
+        controls.SetVisible(true);
+        float dt = Time.deltaTime;
+        float groundY = gm.Court.groundY;
+        Vector2 m = controls.Move;
+        Vector3 wish = new Vector3(m.x, 0f, m.y) * moveSpeed;
+
+        // Serving: the racket stays just behind the ball. If it is not there yet (the last point ended elsewhere) it runs there by itself.
+        if (gm.PlayerServing)
+        {
+            float ballZ = gm.Ball.Position.z;                 // negative: the player's side
+            float lo = ballZ - serveStand.y, hi = ballZ - serveStand.x; // range of the racket's z
+            float zNow = Racket.Position.z;
+            if (zNow < lo - 0.05f) wish.z = moveSpeed;        // too far back: run forward
+            else if (zNow > hi + 0.05f) wish.z = -moveSpeed;  // too far forward: run back
+            else if (zNow + wish.z * dt < lo || zNow + wish.z * dt > hi) wish.z = 0f;
+        }
+        runVelocity = Vector3.MoveTowards(runVelocity, wish, acceleration * dt);
+        Vector3 hand = new Vector3(Racket.Position.x + runVelocity.x * dt, Racket.height, Racket.Position.z + runVelocity.z * dt);
+        Racket.MoveTo(hand);
+        PlaceFeet(groundY);
+        if (Mathf.Abs(Racket.Position.x - hand.x) > 1e-4f) runVelocity.x = 0f;
+        if (Mathf.Abs(Racket.Position.z - hand.z) > 1e-4f) runVelocity.z = 0f;
+
+        // The body looks at the ball while it is in play.
+        bool ballOn = gm.Ball != null && gm.Ball.gameObject.activeInHierarchy && gm.MatchOn;
+        character.LookAt(gm.Ball != null ? gm.Ball.Position : Vector3.zero, ballOn);
+
+        // The swing button.
+        if (controls.ConsumeSwing() && Time.time - swingStart >= swingCooldown)
+        {
+            swingStart = Time.time;
+            swingOpen = true;
+            stickAtPress = controls.Move;
+            character.Swing();
+            SwingStarted?.Invoke(stickAtPress);
+        }
+        if (swingOpen && Time.time - swingStart > contactWindow.y) swingOpen = false;
     }
 
     public override void Tick(GameManager gm)
     {
+        EnsureCharacter();
+        if (character != null && controls != null) { TickCharacter(gm); return; }
         if (cam == null) cam = Camera.main;
         Vector3 pointer;
         if (Input.touchCount > 0)
@@ -129,6 +276,31 @@ public class PlayerRacketController : RacketController
         Racket.MoveTo(hit);
     }
 
+    // How clean the ball was met, 0-1: close to the racket head and at a comfortable height.
+    float Cleanness(Vector3 contact)
+    {
+        Vector3 c = Racket.HitCenter;
+        float d = Mathf.Sqrt((contact.x - c.x) * (contact.x - c.x) + (contact.z - c.z) * (contact.z - c.z));
+        float flat = 1f - Mathf.Clamp01(d / Mathf.Max(0.1f, buttonHitRadius));
+        float high = Mathf.Clamp01(Mathf.Abs(contact.y - (Racket.height + 0.15f)) / Mathf.Max(0.2f, Racket.hitHeight));
+        return flat * (1f - 0.5f * high);
+    }
+
+    // The button swing has no swipe to read: the stick makes one. Towards the net = fast (deep), away = slow (short); how cleanly the ball is met
+    // adds to it, so that a good timing with the stick forward gives the swing speeds of GREAT and PERFECT. Sideways stick = sideways swing.
+    void PrepareButtonSwing(GameManager gm, Vector3 contact, float maxX)
+    {
+        Vector2 m = SwingStick;
+        float power = Mathf.Lerp(stickPower.x, stickPower.y, (m.y + 1f) * 0.5f);
+        float baseSpeed = fullPowerSpeed * Mathf.Pow(power, 1f / Mathf.Max(0.1f, powerCurve));
+        float clean = Cleanness(contact);
+        float boost = gm.IsServing ? 0f : clean * clean * Mathf.Clamp01(m.y);
+        float speed = Mathf.Lerp(baseSpeed, perfectSwipeSpeed * 1.05f, boost);
+        float side = m.x * -Racket.SideSign * maxX / Mathf.Max(0.05f, sideSwipeFactor); // right on their screen: +x for the near side, -x for the far one
+        Racket.ForceSwing(new Vector3(side, 0f, -Racket.SideSign * speed), 0.1f);
+        swingOpen = false; // one hit per swing
+    }
+
     // The ball is pushed so that it reaches the net, hits it and drops on the hitter's side.
     Vector3 NetShot(GameManager gm, Vector3 contact, float landX)
     {
@@ -144,12 +316,13 @@ public class PlayerRacketController : RacketController
     // one sends it deeper, a full-speed one to the far end. A racket moving away from the net pushes the ball into it.
     public override Vector3 ComputeShot(GameManager gm, Vector3 contact)
     {
-        float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
-        LastSwipeSpeed = forwardSpeed;
-        float dx = contact.x - Racket.HitCenter.x; // off-centre hit, measured where the racket met the ball
-
         Court court = gm.Court;
         float maxX = court.halfWidth - landMargin;
+        if (UsesButton) PrepareButtonSwing(gm, contact, maxX);
+        float forwardSpeed = Racket.SwingForwardSpeed, sideSpeed = Racket.SwingSideSpeed;
+        LastSwipeSpeed = forwardSpeed;
+        float dx = (contact.x - Racket.HitCenter.x) * (UsesButton ? buttonOffCentre : 1f); // off-centre hit, measured where the racket met the ball
+
         float maxDepth = court.halfLength - landMargin;
         float landX = Mathf.Clamp(sideSpeed * sideSwipeFactor - dx * offCentreFactor, -maxX, maxX);
 

@@ -13,6 +13,7 @@ public class OnlineMatch : MonoBehaviour
     public OnlineSession session;
     public OnlineMatchmaking screen;
     [Tooltip("The other player's racket (on the far side, next to the fake opponent's controller).")]
+    bool swingHooked;
     public RemoteRacketController remote;
     [Tooltip("The fake opponent (plays when nobody is found).")]
     public OnlineRacketController fake;
@@ -141,6 +142,9 @@ public class OnlineMatch : MonoBehaviour
         lastHeard = Time.unscaledTime;
         switch (f[0])
         {
+            case "W": // host: the guest pressed its swing button
+                if (role == OnlineRole.Host && NetProtocol.ParseSwing(f, out Vector2 stick)) remote.RemoteSwing(stick);
+                break;
             case "P": // host: the guest's racket
                 if (role == OnlineRole.Host && NetProtocol.ParseRacketInput(f, out Vector2 xz)) { remote.SetTarget(xz); gotRackets++; }
                 break;
@@ -206,6 +210,11 @@ public class OnlineMatch : MonoBehaviour
         }
         else if (now >= nextSend)
         {
+            if (!swingHooked && game.player is PlayerRacketController mine)
+            {
+                swingHooked = true;
+                mine.SwingStarted += stick => { if (session != null) session.Send(NetProtocol.Swing(stick), true); }; // the swing must not get lost
+            }
             nextSend = now + racketInterval;
             var p = game.player.Racket.Position;
             session.Send(NetProtocol.RacketInput(NetProtocol.Turn(new Vector2(p.x, p.z))), false); // in the host's world

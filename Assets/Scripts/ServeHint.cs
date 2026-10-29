@@ -85,7 +85,9 @@ public class ServeHint : MonoBehaviour
     void Update()
     {
         if (game == null || ghost == null) return;
-        bool serving = game.PlayerServing && !PokiService.AdPlaying;
+        // The character serves with its button: there is no swipe to teach.
+        bool buttonServe = game.player is PlayerRacketController pc && pc.UsesButton;
+        bool serving = game.PlayerServing && !PokiService.AdPlaying && !buttonServe;
         if (!serving)
         {
             waited = 0f; shownFor = 0f; wasServing = false;

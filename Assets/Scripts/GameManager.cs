@@ -570,6 +570,14 @@ public class GameManager : MonoBehaviour
         ball.Position = new Vector3(Mathf.Clamp(r.Position.x, -maxX, maxX), ball.Position.y, ball.Position.z);
         ball.Sync(court.groundY);
 
+        // A character serves with its swing button: the ball is hit when the racket meets it, whatever the reach.
+        if (who is PlayerRacketController button && button.UsesButton)
+        {
+            servePrevDz = float.NaN;
+            if (button.CanHitNow) Hit(side, who);
+            return;
+        }
+
         if (Mathf.Abs(r.Position.z) > Mathf.Abs(ball.Position.z) + serveArmDistance) serveArmed = true;
         // Do not hit the moment the racket enters reach (its speed is still building up): wait for the closest
         // point of the swipe, then read force and direction from the swing.
@@ -623,6 +631,7 @@ public class GameManager : MonoBehaviour
 
     void CheckRacket(int side, RacketController ctrl)
     {
+        if (ctrl is PlayerRacketController human && !human.CanHitNow) return; // a character hits only while its swing is on
         if (InReach(ctrl.Racket)) Hit(side, ctrl);
     }
 

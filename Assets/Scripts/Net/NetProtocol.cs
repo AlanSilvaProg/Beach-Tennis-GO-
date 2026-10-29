@@ -11,6 +11,7 @@ using UnityEngine;
 //   G|pointsToWin|setsToWin          host -> guest: the rules of the match (the host's settings)
 //   R                                ready: the ad break is over, both ways; the host starts when it has both
 //   P|x|z                            guest -> host (unreliable, ~30 per second): where the guest's racket is, already in host coordinates
+//   W|x|y                            guest -> host (reliable): the guest pressed its swing button; x|y is its stick as it sees it (y towards the net)
 //   S|...                            host -> guest: the state of the match (see NetSnapshot); unreliable ~20 per second, reliable when the state changes
 //                                    (banner: 0 none, 1 point for the host, 2 for the guest, 3 set for the host, 4 for the guest)
 //   E|H|side|speed  E|L|impact  E|C|value   host -> guest: a racket hit, the ball landing, the crowd cheering (sounds and effects)
@@ -81,6 +82,15 @@ public static class NetProtocol
         hostSpace = default;
         if (f.Length < 3 || f[0] != "P") return false;
         try { hostSpace = new Vector2(P(f[1]), P(f[2])); return true; } catch { return false; }
+    }
+
+    public static string Swing(Vector2 stick) { return "W|" + F(stick.x) + "|" + F(stick.y); }
+
+    public static bool ParseSwing(string[] f, out Vector2 stick)
+    {
+        stick = default;
+        if (f.Length < 3 || f[0] != "W") return false;
+        try { stick = new Vector2(P(f[1]), P(f[2])); return true; } catch { return false; }
     }
 
     // ---- snapshot ----
