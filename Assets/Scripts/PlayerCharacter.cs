@@ -23,8 +23,8 @@ public class PlayerCharacter : MonoBehaviour
     public float forwardYaw;
     [Tooltip("Multiplies the colours of the character (white = as painted).")]
     public Color tint = Color.white;
-    [Tooltip("Where the racket head is held, from the feet: to the right and towards the net (m).")]
-    public Vector2 handOffset = new Vector2(0.45f, 0.5f);
+    [Tooltip("Where the hit is made, from the feet: to the right of the body and towards the net (m). Sideways 0 keeps the reach the same on the right and on the left.")]
+    public Vector2 handOffset = new Vector2(0f, 0.5f);
 
     [Header("Size")]
     [Tooltip("Scale of the model (the boy is about 0.95 m tall at 1).")]
@@ -237,7 +237,7 @@ public class PlayerCharacter : MonoBehaviour
 
     // ---------- the controller's side ----------
 
-    // The feet stand where the racket is held: the racket is `handOffset` to the right of and in front of them (seen from the body).
+    // The feet stand where the hit is made: the hit point is `handOffset` to the right of and in front of them (seen from the body).
     public Vector3 FeetFor(Vector3 racketPosition, float groundY)
     {
         float s = racket != null ? racket.SideSign : -1f; // -1: the player's side

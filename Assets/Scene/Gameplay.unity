@@ -7175,7 +7175,7 @@ MonoBehaviour:
   followRacket: 1
   forwardYaw: 180
   tint: {r: 1, g: 0.82, b: 0.8, a: 1}
-  handOffset: {x: 0.45, y: 0.5}
+  handOffset: {x: 0, y: 0.5}
   modelScale: 1.8
   racketLength: 0.75
   racketOffset: {x: 0, y: 0.015, z: 0}
@@ -7186,6 +7186,8 @@ MonoBehaviour:
   maxHeadTurn: {x: 75, y: 35}
   swingDuration: 0.5
   contactTime: 0.07
+  showcaseYaw: 180
+  showcaseSpeed: 3
   throwSpeed: {x: 3.4, y: 5.6}
   throwSpin: 700
   fallTime: 0.45
@@ -7199,7 +7201,7 @@ Transform:
   m_GameObject: {fileID: 136719009}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: -0.00000004371139}
-  m_LocalPosition: {x: 0.45, y: 0, z: 5.3}
+  m_LocalPosition: {x: 0, y: 0, z: 5.3}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -10297,7 +10299,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Aspect: 0.5625
+    - _Aspect: 1.59887
     - _DashSpeed: 1
     - _MidRadius: 0.42
     - _RayStrength: 0.08
@@ -26573,7 +26575,7 @@ Transform:
   m_GameObject: {fileID: 1347760167}
   serializedVersion: 2
   m_LocalRotation: {x: 0.15212339, y: 0, z: 0, w: 0.98836154}
-  m_LocalPosition: {x: 0, y: 7.0497594, z: -21.168686}
+  m_LocalPosition: {x: 0, y: 6.32439, z: -18.868107}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -26867,7 +26869,7 @@ MonoBehaviour:
   followRacket: 0
   forwardYaw: 0
   tint: {r: 1, g: 1, b: 1, a: 1}
-  handOffset: {x: 0.45, y: 0.5}
+  handOffset: {x: 0, y: 0.5}
   modelScale: 1.8
   racketLength: 0.75
   racketOffset: {x: 0, y: 0.015, z: 0}
@@ -26878,6 +26880,8 @@ MonoBehaviour:
   maxHeadTurn: {x: 75, y: 35}
   swingDuration: 0.5
   contactTime: 0.07
+  showcaseYaw: 180
+  showcaseSpeed: 3
   throwSpeed: {x: 3.4, y: 5.6}
   throwSpin: 700
   fallTime: 0.45
@@ -26891,7 +26895,7 @@ Transform:
   m_GameObject: {fileID: 1368215816}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.45, y: 0, z: -5.3}
+  m_LocalPosition: {x: 0, y: 0, z: -5.3}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

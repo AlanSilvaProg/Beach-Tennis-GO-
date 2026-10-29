@@ -15,8 +15,8 @@ public class PlayerRacketController : RacketController
     [Tooltip("Running speed (m/s) at full stick and how fast it picks up and loses speed (m/s per second).")]
     public float moveSpeed = 7f;
     public float acceleration = 50f;
-    [Tooltip("Where the racket head is held, from the feet: to the right and towards the net (m).")]
-    public Vector2 handOffset = new Vector2(0.45f, 0.5f);
+    [Tooltip("Where the hit is made, from the feet: to the right of the body and towards the net (m). Sideways 0 (the default) puts the reach of the racket in the middle of the body: the same on the right and on the left.")]
+    public Vector2 handOffset = new Vector2(0f, 0.5f);
     [Tooltip("Reach of the swing on the ground (m): a ball closer than this to the racket is hit when the button is pressed.")]
     public float buttonHitRadius = 1.1f;
     [Tooltip("The racket can hit from this long after the press (the moment the racket meets the ball) until this long (s).")]
