@@ -80,14 +80,30 @@
             else window.unityGame.SendMessage("PokiService", method, arg);
           } catch (e) { }
         }
-        function sync() {
-          var target = wanted && !hidden && !adRunning;
-          if (target === sent) return;
-          sent = target;
+        // A stop goes out at once (an ad must never start before it). A start waits a moment and is cancelled by a stop that comes in that moment, so
+        // a start that is stopped right away (e.g. the controls tutorial opening at the start of a match) never reaches the SDK: it would arrive as a
+        // stop before a start.
+        var startTimer = null;
+        function send(start) {
           chain = chain.then(function () { return initPromise; }).then(function (ok) {
             if (!ok) return;
-            try { if (target) sdk().gameplayStart(); else sdk().gameplayStop(); } catch (e) { }
+            try { if (start) sdk().gameplayStart(); else sdk().gameplayStop(); } catch (e) { }
           });
+        }
+        function sync() {
+          var target = wanted && !hidden && !adRunning;
+          if (target) {
+            if (sent || startTimer) return;
+            startTimer = setTimeout(function () {
+              startTimer = null;
+              if (wanted && !hidden && !adRunning && !sent) { sent = true; send(true); }
+            }, 250);
+            return;
+          }
+          if (startTimer) { clearTimeout(startTimer); startTimer = null; }
+          if (!sent) return;
+          sent = false;
+          send(false);
         }
         function updateHidden() { hidden = document.hidden || !document.hasFocus(); sync(); }
         document.addEventListener("visibilitychange", updateHidden);

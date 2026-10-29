@@ -28,9 +28,8 @@ using UnityEngine;
 public static class PokiEvents
 {
     public static bool LogInEditor = true;
-    // Master switch of the custom events sent to Poki (PokiSDK.customEvent). Off for now, while the core events (loading, gameplayStart / Stop, ads) are
-    // being checked in Poki's inspector. The game does not depend on them: turn it on again to send them.
-    public static bool SendToPoki = false;
+    // Master switch of the custom events sent to Poki (PokiSDK.customEvent). The game does not depend on them: turn it off to send none.
+    public static bool SendToPoki = true;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] static extern void PokiCustomEvent(string noun, string verb, string json);

@@ -269,6 +269,7 @@ public class GameManager : MonoBehaviour
         Paused = paused;
         Time.timeScale = paused ? 0f : 1f;
         AudioListener.pause = paused;
+        PokiEvents.Track("pause", paused ? "open" : "resume", "level", level);
         var music = FindFirstObjectByType<MusicPlayer>();
         if (music != null) { var src = music.GetComponent<AudioSource>(); if (src != null) src.ignoreListenerPause = true; }
         if (poki != null) { if (paused) poki.GameplayStop(); else poki.GameplayStart(); }
@@ -277,6 +278,7 @@ public class GameManager : MonoBehaviour
     // The EXIT GAME button of the pause window: the match is left and the menu comes back.
     public void ExitToMenu()
     {
+        PokiEvents.Track("pause", "exit", "level", level);
         SetPaused(false);
         ReturnToMenu();
     }
@@ -533,13 +535,16 @@ public class GameManager : MonoBehaviour
         stats = new MatchStats { level = Online ? 1 : level };
         if (shotFx != null) shotFx.Clear();
         if (confetti != null) confetti.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-        if (poki != null) poki.GameplayStart(); // the player's first input of the match
+        // The controls tutorial opens at the first match of a session: gameplay starts when it is closed (SetTutorialHold), not before, so Poki never sees
+        // a start that is stopped in the same moment.
+        bool tutorialNow = !Online && Role == NetRole.None && !tutorialSeen && tutorial != null;
+        if (poki != null && !tutorialNow) poki.GameplayStart(); // the player's first input of the match
         server = 0;
         bannerKind = 0;
         if (opponent == ai) ai.SetLevel(level);
         ResetRackets();
         PrepareServe();
-        if (!Online && Role == NetRole.None && !tutorialSeen && tutorial != null) { tutorialSeen = true; tutorial.Show(); } // how to move and how to hit
+        if (tutorialNow) { tutorialSeen = true; tutorial.Show(); } // how to move and how to hit
     }
 
     public int TrophiesFor(int forLevel) { return Mathf.Clamp(firstLevelTrophies + Mathf.Max(0, forLevel - 1), 1, Mathf.Max(1, maxTrophies)); }
