@@ -50,6 +50,15 @@ public class PlayerControls : MonoBehaviour
     public Vector2 Move { get; private set; }
     public bool Visible => visible;
 
+    // Where the swing button is on the screen (pixels), when it is drawn (a phone).
+    public bool TryGetSwingButtonScreen(out Vector2 screen)
+    {
+        screen = default;
+        if (button == null || !button.gameObject.activeInHierarchy) return false;
+        screen = RectTransformUtility.WorldToScreenPoint(null, button.position);
+        return true;
+    }
+
     bool visible, swingQueued, mobile;
     RectTransform root, stickBase, knob, button, stickPad, swingPad;
     Image baseImage, knobImage, buttonImage, buttonRing;

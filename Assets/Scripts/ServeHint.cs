@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -5,8 +6,20 @@ using UnityEngine.UI;
 // see-through "ghost" racket pulls back behind the ball and swings through it, with the tutorial hand holding it (the same hand as the menu's
 // TapHint). It keeps looping, whatever the player does with the racket, until the serve is hit.
 // Nothing is written on the screen: the ghost shows both who serves (it only appears when it is the player's serve) and how.
+// The character serves with the swing button (pressed on a phone, a click anywhere on a computer): when the player is slow to serve, the same hand taps on the button
+// (a phone: a ring pulses round it) or on the screen with the word CLICK (a computer), with a ring spreading at every tap, until the serve is hit.
 public class ServeHint : MonoBehaviour
 {
+    [Header("Character serve (swing button)")]
+    [Tooltip("Seconds of the player's serve before the hand shows how.")]
+    public float buttonShowAfter = 2.5f;
+    [Tooltip("Seconds of one tap of the hand.")]
+    public float tapLoop = 1.1f;
+    [Tooltip("How far the hand moves away from the spot and back (canvas units, at the hand's scale of 1).")]
+    public Vector2 tapTravel = new Vector2(50.5f, -44.2f);
+    [Tooltip("Where the hand taps on a computer (fractions of the screen, from the bottom left).")]
+    public Vector2 clickAt = new Vector2(0.5f, 0.3f);
+
     [Header("Scene")]
     public GameManager game;
     [Tooltip("The tutorial hand (a UI Image).")]
@@ -82,12 +95,153 @@ public class ServeHint : MonoBehaviour
         ghost.gameObject.SetActive(false);
     }
 
+    // ---------- the character's serve: tap the button / click ----------
+    RectTransform tapRing, buttonRing;
+    Image tapRingImage, buttonRingImage;
+    TextMeshProUGUI clickLabel;
+    float buttonWaited, buttonShownFor, buttonVisibility;
+    PlayerControls controlsRef;
+    Sprite ringSprite;
+
+    void BuildButtonParts()
+    {
+        if (tapRing != null || area == null) return;
+        const int n = 128;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float r = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(n * 0.5f, n * 0.5f)) / (n * 0.5f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(1f - Mathf.Abs(r - 0.9f) / 0.1f)));
+            }
+        tex.Apply();
+        ringSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f);
+        tapRing = MakePart("TapRing", out tapRingImage);
+        buttonRing = MakePart("ButtonRing", out buttonRingImage);
+        tapRingImage.sprite = buttonRingImage.sprite = ringSprite;
+
+        var go = new GameObject("ClickLabel", typeof(RectTransform));
+        go.transform.SetParent(area, false);
+        clickLabel = go.AddComponent<TextMeshProUGUI>();
+        if (game != null && game.hud != null && game.hud.winLine1 != null)
+        {
+            clickLabel.font = game.hud.winLine1.font;
+            clickLabel.fontSharedMaterial = game.hud.winLine1.fontSharedMaterial;
+        }
+        clickLabel.alignment = TextAlignmentOptions.Center;
+        clickLabel.fontSize = 56;
+        clickLabel.color = Color.white;
+        clickLabel.raycastTarget = false;
+        clickLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        var lrt = clickLabel.rectTransform;
+        lrt.anchorMin = lrt.anchorMax = lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.sizeDelta = new Vector2(500f, 80f);
+        go.SetActive(false);
+        if (hand != null) hand.SetAsLastSibling();
+    }
+
+    RectTransform MakePart(string name, out Image image)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(area, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        image = go.GetComponent<Image>();
+        image.raycastTarget = false;
+        go.SetActive(false);
+        return rt;
+    }
+
+    Vector2 ToLocal(Vector2 screen)
+    {
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(area, screen, null, out var local);
+        return local;
+    }
+
+    void UpdateButtonServeHint()
+    {
+        if (ghost != null && ghost.gameObject.activeSelf) ghost.gameObject.SetActive(false);
+        BuildButtonParts();
+        bool serving = game.PlayerServing && !PokiService.AdPlaying && !game.TutorialHold;
+        if (!serving)
+        {
+            buttonWaited = 0f; buttonShownFor = 0f;
+            buttonVisibility = Mathf.MoveTowards(buttonVisibility, 0f, Time.unscaledDeltaTime * 5f);
+        }
+        else
+        {
+            buttonWaited += Time.unscaledDeltaTime;
+            bool show = buttonWaited >= buttonShowAfter;
+            buttonVisibility = Mathf.MoveTowards(buttonVisibility, show ? 1f : 0f, Time.unscaledDeltaTime * (show ? 3f : 6f));
+            if (show) buttonShownFor += Time.unscaledDeltaTime;
+        }
+        ApplyButtonServe();
+    }
+
+    void ApplyButtonServe()
+    {
+        bool visible = buttonVisibility > 0.001f;
+        if (hand != null && hand.gameObject.activeSelf != visible) hand.gameObject.SetActive(visible);
+        if (tapRing == null) return;
+        if (!visible) { tapRing.gameObject.SetActive(false); buttonRing.gameObject.SetActive(false); clickLabel.gameObject.SetActive(false); return; }
+
+        // Where it taps: the swing button on a phone, the middle of the lower screen on a computer.
+        if (controlsRef == null) controlsRef = FindFirstObjectByType<PlayerControls>();
+        Vector2 screen = default;
+        bool onButton = controlsRef != null && controlsRef.TryGetSwingButtonScreen(out screen);
+        if (!onButton) screen = new Vector2(Screen.width * clickAt.x, Screen.height * clickAt.y);
+        Vector2 spot = ToLocal(screen);
+
+        float k = (buttonShownFor % tapLoop) / tapLoop;          // 0..1 through one tap
+        float away = Mathf.SmoothStep(0f, 1f, k < 0.5f ? k * 2f : (1f - k) * 2f);   // 0 on the spot, 1 at the far end
+        Vector2 handPos = spot + tapTravel * handScale * away;   // it comes down onto the spot (away = 0) and lifts off again
+        float alpha = buttonVisibility;
+
+        if (hand != null)
+        {
+            hand.localScale = Vector3.one * handScale;
+            hand.anchoredPosition = handPos - fingertip * handScale;
+            hand.localEulerAngles = new Vector3(0f, 0f, Mathf.Lerp(-12f, -28.9f, away));
+            var c = handImage.color; c.a = alpha; handImage.color = c;
+        }
+
+        // a ring spreads from the spot at every tap (when the hand arrives)
+        float burst = Mathf.Clamp01(k / 0.6f);
+        bool ringOn = k < 0.6f;
+        tapRing.gameObject.SetActive(ringOn);
+        if (ringOn)
+        {
+            tapRing.anchoredPosition = spot;
+            tapRing.sizeDelta = Vector2.one * Mathf.Lerp(70f, 210f, burst);
+            tapRingImage.color = new Color(1f, 0.9f, 0.4f, (1f - burst) * alpha);
+        }
+        // a phone: a steady ring round the button says what it is
+        buttonRing.gameObject.SetActive(onButton);
+        if (onButton)
+        {
+            buttonRing.anchoredPosition = spot;
+            float s = 1f + 0.07f * Mathf.Sin(buttonShownFor * 6f);
+            buttonRing.sizeDelta = Vector2.one * 150f * s;
+            buttonRingImage.color = new Color(1f, 0.9f, 0.4f, 0.9f * alpha);
+        }
+        // a computer: the word CLICK under the spot
+        clickLabel.gameObject.SetActive(!onButton);
+        if (!onButton)
+        {
+            clickLabel.text = I18n.Tr("CLICK");
+            clickLabel.rectTransform.anchoredPosition = spot + new Vector2(0f, -110f);
+            var lc = clickLabel.color; lc.a = alpha; clickLabel.color = lc;
+        }
+    }
+
     void Update()
     {
-        if (game == null || ghost == null) return;
-        // The character serves with its button: there is no swipe to teach.
+        if (game == null) return;
+        // The character serves with its button: the hand shows the button instead of a swipe.
         bool buttonServe = game.player is PlayerRacketController pc && pc.UsesButton;
-        bool serving = game.PlayerServing && !PokiService.AdPlaying && !buttonServe;
+        if (buttonServe) { UpdateButtonServeHint(); return; }
+        if (ghost == null) return;
+        bool serving = game.PlayerServing && !PokiService.AdPlaying;
         if (!serving)
         {
             waited = 0f; shownFor = 0f; wasServing = false;

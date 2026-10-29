@@ -214,6 +214,8 @@ public class GameManager : MonoBehaviour
         if (shotFx == null) shotFx = hud != null && hud.winLine1 != null ? ShotFx.Create(gameObject, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : ShotFx.Create(gameObject, null, null);
         if (!onlineScene && tutorial == null)
             tutorial = hud != null && hud.winLine1 != null ? TutorialOverlay.Create(this, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : TutorialOverlay.Create(this, null, null);
+        if (legend == null)
+            legend = hud != null && hud.winLine1 != null ? ControlsLegend.Create(this, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : ControlsLegend.Create(this, null, null);
         if (pauseMenu == null)
             pauseMenu = hud != null && hud.winLine1 != null ? PauseMenu.Create(this, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : PauseMenu.Create(this, null, null);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
@@ -243,6 +245,7 @@ public class GameManager : MonoBehaviour
 
     // ---------- pause (offline matches only) ----------
     PauseMenu pauseMenu;
+    ControlsLegend legend;
     TutorialOverlay tutorial;
     static bool tutorialSeen;      // the controls tutorial opens at the first training match of a session
     public bool Paused { get; private set; }
