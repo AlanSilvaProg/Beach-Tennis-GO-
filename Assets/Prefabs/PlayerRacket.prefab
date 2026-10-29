@@ -109,12 +109,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b8d4c921e92f46a7b1e5c5b5ae7d90d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerRacketController
+  useCharacter: 1
+  moveSpeed: 7
+  acceleration: 50
+  handOffset: {x: 0, y: 0.5}
+  buttonHitRadius: 1.1
+  contactWindow: {x: 0.06, y: 0.3}
+  swingCooldown: 0.35
+  stickPower: {x: 0.3, y: 1}
+  buttonOffCentre: 0.3
+  serveStand: {x: 0.15, y: 0.8}
   cam: {fileID: 0}
   restPosition: {x: 0, y: 1, z: -4.8}
   pointerLift: 0.087
   fullPowerSpeed: 50
   powerCurve: 0.85
   backwardNetSpeed: 1.2
+  stillReach: 3.2
+  fullReach: 18
+  minClearance: 0.7
+  serveMinPower: 0.5
   strongSwipeSpeed: 40
   greatSwipeSpeed: 60
   perfectSwipeSpeed: 80

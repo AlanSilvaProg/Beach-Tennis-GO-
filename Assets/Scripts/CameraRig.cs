@@ -20,7 +20,7 @@ public class CameraRig : MonoBehaviour
 
     [Header("View")]
     [Tooltip("Centre of the view: the camera always looks at this point (before the sideways pan).")]
-    public Vector3 lookAt = new Vector3(0f, 0.6f, 0.5f);
+    public Vector3 lookAt = new Vector3(0f, 0.06f, 1.6f);
     [Tooltip("Look-down angle in degrees.")]
     public float pitch = 32f;
     public float fieldOfView = 50f;
@@ -68,9 +68,9 @@ public class CameraRig : MonoBehaviour
     [Tooltip("Back off on its own, without waiting for the racket to reach the edge of the screen, when the player serves or a ball is about to land near or behind the player's baseline.")]
     public bool lookBehindLine = true;
     [Tooltip("How much of the area behind the baseline must be visible (m).")]
-    public float behindLine = 3.5f;
+    public float behindLine = 2f;
     [Tooltip("A ball predicted to land this close to the baseline (m), or beyond it, makes the camera back off.")]
-    public float deepBallZone = 3f;
+    public float deepBallZone = 2.4f;
     [Tooltip("Furthest the camera may back off for this, as a multiple of the base distance (the Max Pullback above still applies to the racket).")]
     [Range(1f, 2f)] public float behindPullback = 1.5f;
 

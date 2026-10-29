@@ -15,8 +15,8 @@ public class PlayerRacketController : RacketController
     [Tooltip("Running speed (m/s) at full stick and how fast it picks up and loses speed (m/s per second).")]
     public float moveSpeed = 7f;
     public float acceleration = 50f;
-    [Tooltip("Where the racket head is held, from the feet: to the right and towards the net (m).")]
-    public Vector2 handOffset = new Vector2(0.45f, 0.5f);
+    [Tooltip("Where the hit is made, from the feet: to the right of the body and towards the net (m). Sideways 0 (the default) puts the reach of the racket in the middle of the body: the same on the right and on the left.")]
+    public Vector2 handOffset = new Vector2(0f, 0.5f);
     [Tooltip("Reach of the swing on the ground (m): a ball closer than this to the racket is hit when the button is pressed.")]
     public float buttonHitRadius = 1.1f;
     [Tooltip("The racket can hit from this long after the press (the moment the racket meets the ball) until this long (s).")]
@@ -32,7 +32,7 @@ public class PlayerRacketController : RacketController
 
     [Header("Input")]
     public Camera cam;
-    public Vector3 restPosition = new Vector3(0f, 1f, -4.8f);
+    public Vector3 restPosition = new Vector3(0f, 1f, -3.84f);
     [Tooltip("The racket sits this far above the finger/mouse, as a fraction of the screen height (so the pointer does not cover it).")]
     [Range(0f, 0.25f)] public float pointerLift = 0.06f;
 
@@ -46,9 +46,9 @@ public class PlayerRacketController : RacketController
 
     [Header("Reach (how far a swipe can send the ball)")]
     [Tooltip("Furthest the ball can travel (m, measured along the court from the racket) when the racket is still. Near the net that is enough to drop it over; from further back the ball does not reach the net and dies there.")]
-    public float stillReach = 3.2f;
+    public float stillReach = 2.56f;
     [Tooltip("The same for a full-power swipe: it has to cover the whole court, baseline to baseline.")]
-    public float fullReach = 18f;
+    public float fullReach = 14.4f;
     [Tooltip("A ball that would land less than this far past the net (m) is not a shot that crosses: it hits the net instead.")]
     public float minClearance = 0.7f;
 
@@ -76,13 +76,13 @@ public class PlayerRacketController : RacketController
     [Tooltip("Flight time of a full-power shot (lower = faster ball).")]
     public float fastFlight = 0.5f;
     [Tooltip("Where the gentlest aimed shot lands, measured from the net.")]
-    public float shortDepth = 1.5f;
+    public float shortDepth = 1.2f;
     [Tooltip("Within this distance of the net, a hit with the racket almost still is a drop shot: high and short over the net.")]
-    public float dropShotDistance = 2.5f;
+    public float dropShotDistance = 2f;
     [Tooltip("Power (0-1) below which a hit that close to the net is a drop shot.")]
     [Range(0f, 0.5f)] public float dropShotMaxPower = 0.15f;
     [Tooltip("Where the drop shot lands, measured from the net on the opponent's side.")]
-    public float dropShotDepth = 1.3f;
+    public float dropShotDepth = 1.04f;
     [Tooltip("Flight time of the drop shot; longer means a higher arc.")]
     public float dropShotFlight = 1.6f;
     [Tooltip("How much sideways swipe speed moves the landing spot.")]
@@ -112,6 +112,7 @@ public class PlayerRacketController : RacketController
     PlayerControls controls;
     Vector3 feet, runVelocity;
     protected float swingStart = -10f;
+    protected int swingFrame;
     protected bool swingOpen;
     float lastTick = -10f;
     // The character started a swing, with the stick as it was (the other player's copy of this racket is told).
@@ -127,7 +128,8 @@ public class PlayerRacketController : RacketController
         {
             if (!UsesButton) return true;
             float t = Time.time - swingStart;
-            return swingOpen && t >= contactWindow.x && t <= contactWindow.y;
+            // A slow frame (a hitch) must not make the hit miss: for the first frames after the press the end of the window does not count.
+            return swingOpen && t >= contactWindow.x && (t <= contactWindow.y || Time.frameCount - swingFrame <= 2);
         }
     }
     // The stick the shot is read from.
@@ -177,7 +179,6 @@ public class PlayerRacketController : RacketController
             character.Place(feet);
             character.SnapFacing();
             character.LookAt(Vector3.zero, false);
-            if (controls != null) controls.SetVisible(false);
         }
     }
 
@@ -221,12 +222,13 @@ public class PlayerRacketController : RacketController
         if (controls.ConsumeSwing() && Time.time - swingStart >= swingCooldown)
         {
             swingStart = Time.time;
+            swingFrame = Time.frameCount;
             swingOpen = true;
             stickAtPress = controls.Move;
             character.Swing();
             SwingStarted?.Invoke(stickAtPress);
         }
-        if (swingOpen && Time.time - swingStart > contactWindow.y) swingOpen = false;
+        if (swingOpen && Time.time - swingStart > contactWindow.y && Time.frameCount - swingFrame > 2) swingOpen = false;
     }
 
     public override void Tick(GameManager gm)

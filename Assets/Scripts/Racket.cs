@@ -19,8 +19,8 @@ public class Racket : MonoBehaviour
     [Tooltip("Closest the racket can get to the net.")]
     public float minDistance = 0.6f;
     [Tooltip("Furthest the racket can get from the net.")]
-    public float maxDistance = 8.5f;
-    public float maxX = 4.7f;
+    public float maxDistance = 6.8f;
+    public float maxX = 3.76f;
     [Tooltip("When off, maxDistance and maxX are ignored and the controller decides how far the racket can go.")]
     public bool limitToArea = true;
 

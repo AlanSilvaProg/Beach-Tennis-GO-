@@ -19,7 +19,7 @@ public class RemoteRacketController : PlayerRacketController
     protected override Vector2 SwingStick => remoteStick;
     public void RemoteSwing(Vector2 stick)
     {
-        remoteStick = stick; swingStart = Time.time; swingOpen = true;
+        remoteStick = stick; swingStart = Time.time; swingFrame = Time.frameCount; swingOpen = true;
         var body = PlayerCharacter.For(Racket);
         if (body != null) body.Swing();
     }

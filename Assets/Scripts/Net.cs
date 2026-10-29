@@ -6,7 +6,7 @@ public class Net : MonoBehaviour
     [Header("Dimensions (metres)")]
     [Tooltip("Height of the top of the net (and its posts) above the ground; the ball collides below this.")]
     public float height = 1.7f;
-    public float width = 10.2f;
+    public float width = 8.16f;
     public float thickness = 0.04f;
     [Tooltip("Visible height of the net band.")]
     public float bandHeight = 1.0f;
