@@ -127,6 +127,8 @@ public class GameManager : MonoBehaviour
     [Header("Simulation")]
     [Tooltip("Multiplies how fast the ball travels. Arcs stay the same, the ball just gets there sooner.")]
     public float ballSpeed = 1.6f;
+    [Tooltip("The same, in the baseline style (Training): the character runs by itself, so the ball can be quicker. The online match keeps Ball Speed.")]
+    public float baselineBallSpeed = 1.6f;
     public int targetFrameRate = 60;
     [Tooltip("Physics step in seconds (smaller = more precise).")]
     public float physicsStep = 1f / 240f;
@@ -183,7 +185,7 @@ public class GameManager : MonoBehaviour
     public State CurrentState => state;
     public Court Court => court;
     // Simulated ball seconds per real second (the ball arcs are the same, it just gets there sooner).
-    public float BallSpeed => ballSpeed;
+    public float BallSpeed => Baseline ? baselineBallSpeed : ballSpeed;
     public PlayerRacketController Player => player;
     public bool AiShouldChase => state == State.Rally && lastHitter == 0;
     public bool InMenu => state == State.Menu;
@@ -735,8 +737,9 @@ public class GameManager : MonoBehaviour
     void StepBall(bool rules)
     {
         Vector3 prev;
-        float fall = Mathf.Max(0f, -ball.Velocity.y - ball.gravity * physicsStep * ballSpeed); // vertical speed on impact
-        bool landed = ball.Step(physicsStep * ballSpeed, court, net, out prev);
+        float speed = BallSpeed;
+        float fall = Mathf.Max(0f, -ball.Velocity.y - ball.gravity * physicsStep * speed); // vertical speed on impact
+        bool landed = ball.Step(physicsStep * speed, court, net, out prev);
         rallyTime += physicsStep;
         if (landed) PlayLanding(fall);
         if (!rules) return;
@@ -1097,7 +1100,7 @@ public class GameManager : MonoBehaviour
     void AdvanceBall(float seconds)
     {
         int steps = Mathf.Clamp(Mathf.RoundToInt(seconds / physicsStep), 0, 120);
-        for (int i = 0; i < steps; i++) ball.Step(physicsStep * ballSpeed, court, net, out Vector3 prev);
+        for (int i = 0; i < steps; i++) ball.Step(physicsStep * BallSpeed, court, net, out Vector3 prev);
     }
 
     // A change of state on the host: what the guest does about it.

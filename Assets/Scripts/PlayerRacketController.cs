@@ -269,7 +269,7 @@ public class PlayerRacketController : RacketController
             else if (incoming && gm.Bounces >= 1)
             {
                 float dz = Mathf.Abs(ball.Position.z + gm.BaselineZ);
-                float lead = Mathf.Abs(ball.Velocity.z) * gm.ballSpeed * swingLead;
+                float lead = Mathf.Abs(ball.Velocity.z) * gm.BallSpeed * swingLead;
                 go = dz <= lead + 0.5f;
             }
             if (go) StartTapSwing(gm);
