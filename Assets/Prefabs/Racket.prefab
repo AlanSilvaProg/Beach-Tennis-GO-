@@ -47,7 +47,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Racket
   model: {fileID: 1541867155436177886}
   modelScale: 1.6
-  headCenter: 0.54
+  headCenter: 0.41
   facingYaw: 0
   height: 1
   minDistance: 0.6
@@ -65,6 +65,18 @@ MonoBehaviour:
   maxPitch: 30
   restPitch: 0
   edgeRoll: 40
+  ballLeanNear: 3
+  ballLeanFar: 6
+  ballLeanReach: 1.2
+  leanSmoothing: 12
+  flipHeight: 1.1
+  flipTime: 0.85
+  hopHeight: 0.3
+  hopTime: 0.38
+  hopSwing: 0.8
+  hopTilt: 22
+  fallTime: 0.5
+  lieHeight: 0.14
 --- !u!1001 &1364425207441321525
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -91,7 +103,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.864
+      value: -0.656
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: f7d05b4820f7d482181d0b2361561c87, type: 3}
       propertyPath: m_LocalPosition.z
