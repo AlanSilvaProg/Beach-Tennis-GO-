@@ -212,6 +212,8 @@ public class GameManager : MonoBehaviour
         if (!loadedReported) { loadedReported = true; PokiEvents.Track("game", "loaded", "language", I18n.Code); } // once, not at every scene
         if (language != LanguageChoice.Auto) I18n.Current = (I18n.Language)((int)language - 1);
         if (shotFx == null) shotFx = hud != null && hud.winLine1 != null ? ShotFx.Create(gameObject, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : ShotFx.Create(gameObject, null, null);
+        if (pauseMenu == null)
+            pauseMenu = hud != null && hud.winLine1 != null ? PauseMenu.Create(this, hud.winLine1.font, hud.winLine1.fontSharedMaterial) : PauseMenu.Create(this, null, null);
         if (announcer != null) announcer.LoadVoices(); // downloads only the voices of the chosen language
         level = startLevel;
         ai.SetLevel(level);
@@ -219,8 +221,39 @@ public class GameManager : MonoBehaviour
         ball.SetVisible(false);
     }
 
+    // ---------- pause (offline matches only) ----------
+    PauseMenu pauseMenu;
+    public bool Paused { get; private set; }
+
+    // The pause button is there while an offline match is on (not in the menu, the result screens or an ad, never online).
+    public bool CanPause => !onlineScene && Role == NetRole.None && (state == State.Serving || state == State.Rally || state == State.PointOver) && !PokiService.AdPlaying;
+
+    // Stops the game: the time (so the ball, the AI, the timers and the animations), the sounds (the music goes on) and the Poki gameplay events.
+    public void SetPaused(bool paused)
+    {
+        if (paused == Paused || (paused && !CanPause)) return;
+        Paused = paused;
+        Time.timeScale = paused ? 0f : 1f;
+        AudioListener.pause = paused;
+        PokiEvents.Track("pause", paused ? "open" : "resume", "level", level);
+        var music = FindFirstObjectByType<MusicPlayer>();
+        if (music != null) { var src = music.GetComponent<AudioSource>(); if (src != null) src.ignoreListenerPause = true; }
+        if (poki != null) { if (paused) poki.GameplayStop(); else poki.GameplayStart(); }
+    }
+
+    // The EXIT GAME button of the pause window: the match is left and the menu comes back.
+    public void ExitToMenu()
+    {
+        PokiEvents.Track("pause", "exit", "level", level);
+        SetPaused(false);
+        ReturnToMenu();
+    }
+
+    void OnDisable() { if (Paused) { Time.timeScale = 1f; AudioListener.pause = false; Paused = false; } } // never leave the time stopped behind
+
     void Update()
     {
+        if (Paused) return;
         if (Role == NetRole.Guest) { GuestUpdate(); return; }
         stateTimer += Time.deltaTime;
         if (state != State.Menu && state != State.MatchOver) matchTime += Time.deltaTime;
