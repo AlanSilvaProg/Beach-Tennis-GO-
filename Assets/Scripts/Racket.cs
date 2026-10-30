@@ -18,7 +18,7 @@ public class Racket : MonoBehaviour
     public float height = 1.0f;
     [Tooltip("Closest the racket can get to the net.")]
     public float minDistance = 0.6f;
-    [Tooltip("Furthest the racket can get from the net.")]
+    [Tooltip("Not used to move the racket any more (only the net, Min Distance, limits it); kept for the gizmos and the fall pose.")]
     public float maxDistance = 8.5f;
     public float maxX = 4.7f;
     [Tooltip("When off, maxDistance and maxX are ignored and the controller decides how far the racket can go.")]
@@ -224,13 +224,8 @@ public class Racket : MonoBehaviour
     {
         // Distance from the net on this racket's own side; a point beyond the net is held at the net (minDistance).
         float d = Mathf.Max(SideSign * p.z, minDistance);
-        float x = p.x;
-        if (limitToArea)
-        {
-            d = Mathf.Min(d, maxDistance);
-            x = Mathf.Clamp(x, -maxX, maxX);
-        }
-        return new Vector3(x, height, SideSign * d);
+        // Only the net limits the racket: it can go anywhere else, behind the baseline and past the sidelines included.
+        return new Vector3(p.x, height, SideSign * d);
     }
 
     public void MoveTo(Vector3 p)

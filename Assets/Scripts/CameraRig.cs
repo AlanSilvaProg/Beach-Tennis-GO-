@@ -4,7 +4,7 @@ using UnityEngine;
 //  - Distance: `distanceFactor` x the distance at which the whole court fits (below 1 = closer, rackets look bigger),
 //    adjusted for the real screen shape: very wide screens zoom in a little, narrow ones (phones in portrait) back off a little.
 //  - Centre of the view: `lookAt`.
-//  - Sideways: slides with the player's racket (`followX`), up to `maxPan` metres.
+//  - Sideways: slides with the ball (`followBallX`), up to `maxPan` metres.
 //  - Pull-back: if the racket would leave the screen (e.g. going back for the serve), the camera backs off just
 //    enough to keep it visible, but never further than `maxPullback` x the base distance.
 //
@@ -48,9 +48,10 @@ public class CameraRig : MonoBehaviour
     [Tooltip("Furthest the camera may back off for a narrow screen, as a multiple of the normal distance.")]
     [Range(1f, 2f)] public float narrowMaxFactor = 1.7f;
 
+    [Tooltip("Portrait screens (taller than wide): distance multiplier on top of the narrow-screen back-off (0.9 = 10% closer).")]
+    [Range(0.5f, 1f)] public float portraitZoom = 0.9f;
+
     [Header("Sideways follow")]
-    [Tooltip("How much of the racket's sideways position the camera copies (0 = fixed, 1 = locked to the racket).")]
-    [Range(0f, 1f)] public float followX = 0.6f;
     [Tooltip("Furthest the camera slides sideways from the centre (m).")]
     public float maxPan = 2f;
 
@@ -63,6 +64,16 @@ public class CameraRig : MonoBehaviour
     [Range(1f, 1.5f)] public float serveDistanceFactor = 1f;
     [Tooltip("How long the camera takes to catch up with its target (s). Lower = faster.")]
     [Min(0.01f)] public float moveSmoothTime = 0.2f;
+
+    [Header("Far view / short ball")]
+    [Tooltip("The camera stays this far (multiple of the base distance) all the time: the whole court is easy to read.")]
+    [Range(1f, 2f)] public float farFactor = 1.3f;
+    [Tooltip("When the player plays a short ball the camera comes this close (multiple of the base distance), until the opponent answers.")]
+    [Range(0.5f, 1.5f)] public float closeFactor = 1f;
+    [Tooltip("A ball the player hits is short when it is predicted to land within this many metres of the net (on the opponent's side).")]
+    public float shortBallZone = 3.5f;
+    [Tooltip("How much of the ball's sideways position the camera copies (0 = fixed, 1 = locked to the ball). The camera follows the ball, not the racket.")]
+    [Range(0f, 1f)] public float followBallX = 0.6f;
 
     [Header("Look behind the baseline")]
     [Tooltip("Back off on its own, without waiting for the racket to reach the edge of the screen, when the player serves or a ball is about to land near or behind the player's baseline.")]
@@ -92,6 +103,8 @@ public class CameraRig : MonoBehaviour
     float lastAspect;
     bool serving = true;
     Vector3 dir;
+    bool shortBall;        // the player's last shot is short: the camera is close until the ball comes back
+    float prevBallVz;
 
     void OnEnable()
     {
@@ -187,16 +200,34 @@ public class CameraRig : MonoBehaviour
         return true;
     }
 
-    // Where the camera wants to be: panned to the racket, then backed off until the racket (and, when needed, the area behind the baseline) fits.
+    // Short ball: the moment the ball turns towards the opponent's side (a hit by the player, the serve included) its landing spot is predicted;
+    // close to the net, the camera comes in. It goes back out when the ball comes back (the opponent answered) or the point is over.
+    // Also gives the sideways follow (ballLean): the camera slides with the ball (it hangs next to the racket while serving).
+    float ballLean;
+    void UpdateBall()
+    {
+        ballLean = 0f;
+        if (!Application.isPlaying) { shortBall = false; return; }
+        if (ball == null) ball = FindFirstObjectByType<Ball>();
+        if (ball == null || !ball.gameObject.activeInHierarchy) { shortBall = false; prevBallVz = 0f; return; }
+        float vz = ball.Velocity.z;
+        if (vz < -0.1f) shortBall = false; // coming back to the player
+        else if (vz > 0.1f && prevBallVz <= 0.1f) // just hit away by the player
+            shortBall = !serving && PredictLanding(out Vector3 land) && land.z > 0f && land.z < shortBallZone;
+        if (serving) shortBall = false;
+        prevBallVz = vz;
+        ballLean = ball.Position.x * followBallX;
+    }
+
+    // Where the camera wants to be: panned to the ball, then backed off until the racket (and, when needed, the area behind the baseline) fits.
     Vector3 Target()
     {
         UpdateFocus();
-        float pan = 0f;
-        if (playerRacket != null) pan = Mathf.Clamp(playerRacket.Position.x * followX, -maxPan, maxPan);
+        UpdateBall();
+        float pan = Mathf.Clamp(ballLean, -maxPan, maxPan);
         Vector3 centre = lookAt + new Vector3(pan, 0f, 0f);
 
-        bool serve = Application.isPlaying ? serving : previewServing;
-        float lo = BaseDistance * (serve ? serveDistanceFactor : 1f);
+        float lo = BaseDistance * (shortBall ? closeFactor : farFactor);
         float hi = Mathf.Max(lo, BaseDistance * maxPullback);
         if (hasFocusA || hasFocusB) hi = Mathf.Max(hi, BaseDistance * behindPullback);
         float d = hi;
@@ -280,6 +311,7 @@ public class CameraRig : MonoBehaviour
         {
             factor = Mathf.Lerp(1f, wideZoom, Mathf.InverseLerp(wideStartAspect, Mathf.Max(wideStartAspect + 0.01f, wideFullAspect), aspect));
         }
+        if (aspect < 1f) factor *= portraitZoom; // portrait: a bit closer
         aspectFactor = factor;
     }
 }

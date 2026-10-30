@@ -53,6 +53,8 @@ public class PlayerRacketController : RacketController
     public float shortDepth = 1.5f;
     [Tooltip("Within this distance of the net, a hit with the racket almost still is a drop shot: high and short over the net.")]
     public float dropShotDistance = 2.5f;
+    [Tooltip("Close to the net (within this many metres of it) the ball only dies in the net for a strong swing (backwards faster than Strong Swipe Speed); a weak or still racket drops it short over the net.")]
+    public float nearNetDistance = 3.5f;
     [Tooltip("Power (0-1) below which a hit that close to the net is a drop shot.")]
     [Range(0f, 0.5f)] public float dropShotMaxPower = 0.15f;
     [Tooltip("Where the drop shot lands, measured from the net on the opponent's side.")]
@@ -74,7 +76,7 @@ public class PlayerRacketController : RacketController
         serveMinPower = o.serveMinPower; strongSwipeSpeed = o.strongSwipeSpeed; greatSwipeSpeed = o.greatSwipeSpeed; perfectSwipeSpeed = o.perfectSwipeSpeed;
         weakShotSpeed = o.weakShotSpeed; weakNetHeightFraction = o.weakNetHeightFraction; slowFlight = o.slowFlight; fastFlight = o.fastFlight;
         shortDepth = o.shortDepth; dropShotDistance = o.dropShotDistance; dropShotMaxPower = o.dropShotMaxPower; dropShotDepth = o.dropShotDepth;
-        dropShotFlight = o.dropShotFlight; sideSwipeFactor = o.sideSwipeFactor; offCentreFactor = o.offCentreFactor; landMargin = o.landMargin;
+        dropShotFlight = o.dropShotFlight; nearNetDistance = o.nearNetDistance; sideSwipeFactor = o.sideSwipeFactor; offCentreFactor = o.offCentreFactor; landMargin = o.landMargin;
     }
 
     bool sawTouch;          // once a touch has been seen the mouse is ignored (a phone also reports an emulated mouse)
@@ -156,20 +158,23 @@ public class PlayerRacketController : RacketController
         // The serve cannot fail or be short: no net, no drop shot, no limit on the reach, and a medium ball at the least.
         bool serve = gm.IsServing;
         // Swinging backwards: the ball only reaches the net, hits it and drops on this side.
-        if (!serve && forwardSpeed < -backwardNetSpeed) return NetShot(gm, contact, landX);
+        // Close to the net that takes a strong swing: a weak one (or a still racket) only drops the ball short.
+        float fromNet = Mathf.Abs(contact.z);
+        bool nearNet = !serve && fromNet <= nearNetDistance;
+        if (!serve && forwardSpeed < -backwardNetSpeed && (!nearNet || forwardSpeed < -strongSwipeSpeed)) return NetShot(gm, contact, landX);
 
         float power = Mathf.Pow(Mathf.Clamp01(forwardSpeed / Mathf.Max(0.1f, fullPowerSpeed)), powerCurve);
         if (serve) power = Mathf.Max(power, serveMinPower);
         // A gentle swipe cannot send the ball far: from near the net it still drops over, from further back it falls short and dies at the net.
         float reach = serve ? fullReach : Mathf.Lerp(stillReach, fullReach, power);
-        float fromNet = Mathf.Abs(contact.z);
-        if (reach - fromNet < minClearance) return NetShot(gm, contact, landX);
-        if (!serve && power <= dropShotMaxPower && Mathf.Abs(contact.z) <= dropShotDistance)
+        if (!nearNet && reach - fromNet < minClearance) return NetShot(gm, contact, landX);
+        if (!serve && ((power <= dropShotMaxPower && fromNet <= dropShotDistance) || (nearNet && forwardSpeed <= 0f))) // (a gentle backward swing near the net is a drop shot too)
         {
             float dropX = Mathf.Clamp(landX, -maxX, maxX);
             return gm.Ball.SolveHit(contact, dropX, -Racket.SideSign * dropShotDepth, court.groundY + gm.Ball.radius, dropShotFlight, gm.Net);
         }
         float landDepth = Mathf.Min(shortDepth + (maxDepth - shortDepth) * power, reach - fromNet); // past the net, held to what the swipe can reach
+        if (nearNet) landDepth = Mathf.Max(landDepth, dropShotDepth); // near the net a weak ball still crosses, short
         float landZ = -Racket.SideSign * landDepth;
         float t = Mathf.Lerp(slowFlight, fastFlight, power);
         return gm.Ball.SolveHit(contact, landX, landZ, court.groundY + gm.Ball.radius, t, gm.Net);
