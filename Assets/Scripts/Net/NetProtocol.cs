@@ -28,6 +28,7 @@ public struct NetSnapshot
     public bool ballVisible;
     public Vector3 ballPos, ballVel;
     public Vector2 racketA, racketB;   // x, z
+    public int ack;                    // the last hit of the guest that the host has dealt with (see GuestHit)
 }
 
 public static class NetProtocol
@@ -89,7 +90,7 @@ public static class NetProtocol
     {
         return "S|" + s.serial + "|" + s.state + "|" + s.server + "|" + s.scoreA + "|" + s.scoreB + "|" + s.setsA + "|" + s.setsB + "|" + F(s.time) + "|" + (s.ballVisible ? 1 : 0)
                + "|" + F(s.ballPos.x) + "|" + F(s.ballPos.y) + "|" + F(s.ballPos.z) + "|" + F(s.ballVel.x) + "|" + F(s.ballVel.y) + "|" + F(s.ballVel.z)
-               + "|" + F(s.racketA.x) + "|" + F(s.racketA.y) + "|" + F(s.racketB.x) + "|" + F(s.racketB.y) + "|" + s.banner;
+               + "|" + F(s.racketA.x) + "|" + F(s.racketA.y) + "|" + F(s.racketB.x) + "|" + F(s.racketB.y) + "|" + s.banner + "|" + s.ack;
     }
 
     public static bool TryDecode(string[] f, out NetSnapshot s)
@@ -106,6 +107,7 @@ public static class NetProtocol
             s.racketA = new Vector2(P(f[16]), P(f[17]));
             s.racketB = new Vector2(P(f[18]), P(f[19]));
             s.banner = I(f[20]);
+            s.ack = f.Length > 21 ? I(f[21]) : 0;
             return true;
         }
         catch { return false; }
@@ -127,6 +129,30 @@ public static class NetProtocol
 
     public static Vector3 Turn(Vector3 v) { return new Vector3(-v.x, v.y, -v.z); }
     public static Vector2 Turn(Vector2 v) { return new Vector2(-v.x, -v.y); }
+
+    // ---- guest hit ----
+    // The guest judges and plays its own hits at once (so the ball never goes through its racket while a message crosses the network) and tells
+    // the host where the ball is and where it goes now, already in host coordinates. `latency` is the guest's estimate of the one-way delay.
+    public static string GuestHit(int id, Vector3 hostPos, Vector3 hostVel, int quality, float latency)
+    {
+        return "B|" + id + "|" + F(hostPos.x) + "|" + F(hostPos.y) + "|" + F(hostPos.z) + "|" + F(hostVel.x) + "|" + F(hostVel.y) + "|" + F(hostVel.z) + "|" + quality + "|" + F(latency);
+    }
+
+    public static bool ParseGuestHit(string[] f, out int id, out Vector3 pos, out Vector3 vel, out int quality, out float latency)
+    {
+        id = quality = 0; pos = vel = default; latency = 0f;
+        if (f.Length < 10 || f[0] != "B") return false;
+        try
+        {
+            id = I(f[1]);
+            pos = new Vector3(P(f[2]), P(f[3]), P(f[4]));
+            vel = new Vector3(P(f[5]), P(f[6]), P(f[7]));
+            quality = Mathf.Clamp(I(f[8]), 0, 4);
+            latency = Mathf.Clamp(P(f[9]), 0f, 0.4f);
+            return true;
+        }
+        catch { return false; }
+    }
 
     // ---- events ----
 

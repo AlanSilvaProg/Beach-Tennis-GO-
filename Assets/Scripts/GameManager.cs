@@ -153,6 +153,9 @@ public class GameManager : MonoBehaviour
     RacketController opponent;     // who plays the far side right now (see Opponent)
     string opponentName = "CPU";
     string localName = "";
+    int guestHitId, guestHitAck;   // guest: the hits we sent; host: the last one dealt with (sent back in every state)
+    bool guestHitPending;          // guest: we hit the ball and the host has not answered yet
+    float guestHitUntil, guestLatency;
     int netSerial;                 // grows with every change of state (sent to the guest)
     int bannerKind;                // what the banner says, as a number for the guest (see NetSnapshot)
     MatchStats stats; // what happened in the match so far (for the reward)
@@ -277,7 +280,7 @@ public class GameManager : MonoBehaviour
             case State.Serving:
                 hud.Banner = Time.time < retryNoticeUntil ? I18n.Tr("Retry!") : ""; // no text about who serves or how: the ServeHint ghost teaches it
                 if (server == 0) TryHumanServe(player.Racket, 0, player);
-                else if (Role == NetRole.Host) TryHumanServe(opponent.Racket, 1, opponent); // the other player serves with their own racket
+                else if (Role == NetRole.Host) { } // the other player serves on their own screen: the hit arrives as a message (HostApplyGuestHit)
                 else if (stateTimer > serveDelay) TryAiServe();
                 break;
             case State.Rally:
@@ -648,7 +651,7 @@ public class GameManager : MonoBehaviour
 
         // Rackets hit the ball when it is within reach and flying towards them.
         if (lastHitter != 0 && ball.Velocity.z < 0f) CheckRacket(0, player);
-        if (state == State.Rally && lastHitter != 1 && ball.Velocity.z > 0f) CheckRacket(1, opponent);
+        if (state == State.Rally && lastHitter != 1 && ball.Velocity.z > 0f && Role != NetRole.Host) CheckRacket(1, opponent); // (a real player's hits come as messages)
 
         if (state == State.Rally && (rallyTime > rallyTimeout || ball.Position.magnitude > ball.maxDistance))
             Score(1 - lastHitter);
@@ -693,6 +696,14 @@ public class GameManager : MonoBehaviour
         }
         if (side == 0) opponent.OnOpponentHit(this);
         NetMessage?.Invoke(NetProtocol.EventHit(side, ball.Velocity.magnitude, (int)quality)); // the other player hears it too
+        if (Role == NetRole.Guest && side == 0)
+        {
+            // Our own hit is played here at once; the host is told and takes the ball from us. Its states are ignored until it has answered.
+            guestHitId++;
+            guestHitPending = true;
+            guestHitUntil = Time.unscaledTime + 0.7f;
+            NetMessage?.Invoke(NetProtocol.GuestHit(guestHitId, NetProtocol.Turn(ball.Position), NetProtocol.Turn(ball.Velocity), (int)quality, guestLatency));
+        }
     }
 
     void Play(AudioClip clip, float volume, float pitch)
@@ -928,7 +939,7 @@ public class GameManager : MonoBehaviour
         {
             serial = netSerial, state = (int)state, server = server,
             scoreA = playerScore, scoreB = aiScore, setsA = playerSets, setsB = aiSets,
-            banner = bannerKind, time = matchTime, ballVisible = ball.gameObject.activeSelf,
+            banner = bannerKind, time = matchTime, ballVisible = ball.gameObject.activeSelf, ack = guestHitAck,
             ballPos = ball.Position, ballVel = ball.Velocity,
             racketA = new Vector2(player.Racket.Position.x, player.Racket.Position.z),
             racketB = new Vector2(opponent.Racket.Position.x, opponent.Racket.Position.z),
@@ -939,6 +950,16 @@ public class GameManager : MonoBehaviour
     public void GuestApply(NetSnapshot v, float latency)
     {
         if (peerGone || Role != NetRole.Guest) return;
+        guestLatency = latency;
+        if (guestHitPending)
+        {
+            if (v.ack >= guestHitId || Time.unscaledTime > guestHitUntil) guestHitPending = false;
+            else
+            {
+                if (opponent is RemoteRacketController waiting) waiting.SetTarget(v.racketB);
+                return; // the host has not seen our hit yet: its ball is the old one
+            }
+        }
         bool changed = v.serial != netSerial || v.state != (int)state;
         playerScore = v.scoreA; aiScore = v.scoreB; playerSets = v.setsA; aiSets = v.setsB;
         server = v.server;
@@ -949,8 +970,9 @@ public class GameManager : MonoBehaviour
         if (v.ballVisible)
         {
             if (!ball.gameObject.activeSelf) ball.SetVisible(true);
-            ball.SetState(v.ballPos, v.state == (int)State.Serving ? Vector3.zero : v.ballVel);
-            if (v.state != (int)State.Serving) AdvanceBall(latency); // it has travelled on while the message was on its way
+            bool ownServe = v.state == (int)State.Serving && server == 0 && !changed; // we serve: the ball follows our racket here, not the host's copy of it
+            if (!ownServe) ball.SetState(v.ballPos, v.state == (int)State.Serving ? Vector3.zero : v.ballVel);
+            if (!ownServe && v.state != (int)State.Serving) AdvanceBall(latency); // it has travelled on while the message was on its way
             ball.Sync(court.groundY);
         }
         else if (ball.gameObject.activeSelf) ball.SetVisible(false);
@@ -971,6 +993,8 @@ public class GameManager : MonoBehaviour
             case State.Serving:
                 ball.SetVisible(true);
                 lastHitter = server;
+                serveArmed = false;
+                servePrevDz = float.NaN;
                 cameraRig.SetServing(true);
                 hitsInPoint = 0;
                 ResetRackets();
@@ -1000,8 +1024,54 @@ public class GameManager : MonoBehaviour
         bool inputLocked = state == State.Menu || state == State.MatchOver;
         if (!PokiService.AdPlaying && !inputLocked) player.Tick(this);
         if (state != State.MatchOver) opponent.Tick(this);
-        if (state == State.Rally || state == State.PointOver) Simulate(false); else ball.Sync(court.groundY);
+        if (state == State.Rally) GuestRally();
+        else if (state == State.PointOver) Simulate(false);
+        else if (state == State.Serving && server == 0 && !guestHitPending) TryHumanServe(player.Racket, 0, player);
+        else ball.Sync(court.groundY);
         UpdateHud();
+    }
+
+    // Guest: the ball flies on its own, and our racket hits it here and now, as in a local match.
+    void GuestRally()
+    {
+        accumulator = Mathf.Min(accumulator + Time.deltaTime, maxFrameTime);
+        while (accumulator >= physicsStep && state == State.Rally)
+        {
+            accumulator -= physicsStep;
+            float fall = Mathf.Max(0f, -ball.Velocity.y - ball.gravity * physicsStep * ballSpeed);
+            bool landed = ball.Step(physicsStep * ballSpeed, court, net, out Vector3 prev);
+            rallyTime += physicsStep;
+            if (landed) PlayLanding(fall);
+            else if (lastHitter != 0 && ball.Velocity.z < 0f) CheckRacket(0, player);
+        }
+        ball.Sync(court.groundY);
+    }
+
+    // Host: the guest says it hit the ball. The ball is theirs from where they hit it, carried on by the time the message took.
+    public void HostApplyGuestHit(int id, Vector3 pos, Vector3 vel, int quality, float latency)
+    {
+        if (Role != NetRole.Host || peerGone || id <= guestHitAck) return;
+        guestHitAck = id;
+        bool valid = (state == State.Serving && server == 1) || (state == State.Rally && lastHitter != 1);
+        if (valid)
+        {
+            ball.SetState(pos, vel);
+            AdvanceBall(latency);
+            lastHitter = 1;
+            hitsInPoint++;
+            rallyTime = 0f;
+            float speed = vel.magnitude;
+            PlayHit(1, speed);
+            if (shotFx != null) { shotFx.Hit(ball.Position, (ShotQuality)quality, speed, vel, false); opponent.Racket.Punch(quality == 0 ? 0.2f : shotFx.Power(speed)); }
+            if (state == State.Serving)
+            {
+                accumulator = 0f;
+                cameraRig.SetServing(false);
+                EnterState(State.Rally);
+            }
+            ball.Sync(court.groundY);
+        }
+        netSerial++; // the answer goes out at once, with the ball as the host has it
     }
 
     // Guest: the burst (and, for our own very good shots, the word, the voice and the bonus) of a hit the host reports.
@@ -1020,7 +1090,7 @@ public class GameManager : MonoBehaviour
     public void GuestEvent(string[] f)
     {
         if (!NetProtocol.ParseEvent(f, out char kind, out float a, out float b)) return;
-        if (kind == 'H') { PlayHit(1 - (int)a, b); GuestHitFx(1 - (int)a, b, (ShotQuality)NetProtocol.HitQuality(f)); }
+        if (kind == 'H') { lastHitter = 1 - (int)a; PlayHit(1 - (int)a, b); GuestHitFx(1 - (int)a, b, (ShotQuality)NetProtocol.HitQuality(f)); }
         else if (kind == 'C') Bleachers.Cheer(a);
     }
 

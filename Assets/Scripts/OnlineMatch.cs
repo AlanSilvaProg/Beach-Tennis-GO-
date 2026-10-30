@@ -154,6 +154,10 @@ public class OnlineMatch : MonoBehaviour
                     gotStates++;
                 }
                 break;
+            case "B": // host: the guest has hit the ball
+                if (role == OnlineRole.Host && started && NetProtocol.ParseGuestHit(f, out int hitId, out Vector3 hitPos, out Vector3 hitVel, out int hitQuality, out float hitLatency))
+                    game.HostApplyGuestHit(hitId, hitPos, hitVel, hitQuality, hitLatency);
+                break;
             case "E":
                 if (role == OnlineRole.Guest && started) game.GuestEvent(f);
                 break;
@@ -173,7 +177,9 @@ public class OnlineMatch : MonoBehaviour
     // Hits and cheers of the host's match, for the guest.
     void OnGameMessage(string message)
     {
-        if (role == OnlineRole.Host && started) session.Send(message, true);
+        if (!started) return;
+        if (role == OnlineRole.Host || (role == OnlineRole.Guest && message.StartsWith("B|"))) session.Send(message, true); // the guest only sends its hits
+
     }
 
     void OnPeerLeft()
