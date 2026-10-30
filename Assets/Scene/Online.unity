@@ -21008,7 +21008,7 @@ MonoBehaviour:
   showAtFirstServe: 1
   showAfter: 2
   loopTime: 2.6
-  pullBack: 1.1
+  pullBack: 1.7
   followThrough: 1.6
   ghostAlpha: 0.6
   ghostScale: 1

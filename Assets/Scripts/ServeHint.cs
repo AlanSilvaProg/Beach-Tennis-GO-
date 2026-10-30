@@ -17,6 +17,8 @@ public class ServeHint : MonoBehaviour
     [Tooltip("Where the fingertip is, from the middle of the hand picture (canvas units).")]
     public Vector2 fingertip = new Vector2(-1f, 47.3f);
     public float handScale = 0.425f;
+    [Tooltip("Where the hand holds the racket: 0 = the middle of the head, 1 = the very end of the handle (the base).")]
+    [Range(0f, 1.2f)] public float gripAlong = 0.9f;
 
     [Header("When")]
     [Tooltip("The very first serve of the session shows the ghost at once.")]
@@ -28,7 +30,7 @@ public class ServeHint : MonoBehaviour
     [Tooltip("Seconds of one demonstration (pull back, swing, rest).")]
     public float loopTime = 2.6f;
     [Tooltip("How far behind the ball the racket is pulled back (m).")]
-    public float pullBack = 1.1f;
+    public float pullBack = 1.7f;
     [Tooltip("How far past the ball the swing goes on (m).")]
     public float followThrough = 1.6f;
     [Range(0f, 1f)] public float ghostAlpha = 0.7f;
@@ -143,11 +145,13 @@ public class ServeHint : MonoBehaviour
         float alpha = visibility * fade;
         ghostMaterial.SetFloat("_Alpha", ghostAlpha * alpha);
 
-        // The hand holds the racket: its fingertip is on the racket, wherever that is on the screen.
+        // The hand holds the racket by its base: its fingertip is on the handle, wherever that is on the screen.
         var cam = Camera.main;
         if (cam != null && hand != null)
         {
-            Vector3 screen = cam.WorldToScreenPoint(pos);
+            // the base of the racket: from the head centre towards the model's pivot (the end of the handle)
+            Vector3 grip = ghost.childCount > 0 ? Vector3.LerpUnclamped(pos, ghost.GetChild(0).position, gripAlong) : pos;
+            Vector3 screen = cam.WorldToScreenPoint(grip);
             RectTransformUtility.ScreenPointToLocalPointInRectangle(area, screen, null, out var local);
             hand.localScale = Vector3.one * handScale;
             hand.anchoredPosition = local - fingertip * handScale;

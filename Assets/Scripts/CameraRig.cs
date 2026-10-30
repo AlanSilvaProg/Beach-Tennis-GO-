@@ -104,7 +104,8 @@ public class CameraRig : MonoBehaviour
     bool serving = true;
     Vector3 dir;
     bool shortBall;        // the player's last shot is short: the camera is close until the ball comes back
-    float prevBallVz;
+    Vector3 latched;       // where the camera is going; worked out at each hit, not every frame
+    bool haveTarget;
 
     void OnEnable()
     {
@@ -130,6 +131,7 @@ public class CameraRig : MonoBehaviour
         Vector3 pos = Target();
         if (transform.rotation != rot) transform.rotation = rot;
         if ((transform.position - pos).sqrMagnitude > 1e-8f) transform.position = pos;
+        latched = pos; haveTarget = true;
         velocity = Vector3.zero;
     }
 
@@ -146,9 +148,10 @@ public class CameraRig : MonoBehaviour
     {
         if (court == null) return;
         if (!Application.isPlaying) { Snap(); return; }
-        if (Mathf.Abs(cam.aspect - lastAspect) > 0.001f) Refit(); // the window was resized / the phone turned
+        if (Mathf.Abs(cam.aspect - lastAspect) > 0.001f) { Refit(); haveTarget = false; } // the window was resized / the phone turned
+        if (UpdateBall() || !haveTarget) { latched = Target(); haveTarget = true; }
         transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
-        transform.position = Vector3.SmoothDamp(transform.position, Target(), ref velocity, moveSmoothTime);
+        transform.position = Vector3.SmoothDamp(transform.position, latched, ref velocity, moveSmoothTime);
     }
 
     float BaseDistance => Mathf.Max(minDistance, fitDistance * distanceFactor * aspectFactor);
@@ -200,30 +203,45 @@ public class CameraRig : MonoBehaviour
         return true;
     }
 
-    // Short ball: the moment the ball turns towards the opponent's side (a hit by the player, the serve included) its landing spot is predicted;
-    // close to the net, the camera comes in. It goes back out when the ball comes back (the opponent answered) or the point is over.
-    // Also gives the sideways follow (ballLean): the camera slides with the ball (it hangs next to the racket while serving).
+    // The camera moves only when the ball is hit (or a serve starts, or the ball appears or goes): it works out where to be then, glides
+    // there and stays still until the next hit. At a hit it looks at where the ball is going: sideways towards its landing spot, and close
+    // when the player's ball is short (it lands near the net), far otherwise. Returns true when the target has to be worked out again.
     float ballLean;
-    void UpdateBall()
+    bool hadBall, prevServing = true;
+    Vector2 prevHorizontal;
+    const float HitJump = 3f;   // change of the ball's horizontal velocity (m/s) that counts as a racket hit
+    const float HitMinSpeed = 1.5f; // ...as long as the ball keeps moving (a ball that lands just stops: not a hit)
+
+    bool UpdateBall()
     {
-        ballLean = 0f;
-        if (!Application.isPlaying) { shortBall = false; return; }
+        if (!Application.isPlaying) { shortBall = false; ballLean = 0f; return false; }
         if (ball == null) ball = FindFirstObjectByType<Ball>();
-        if (ball == null || !ball.gameObject.activeInHierarchy) { shortBall = false; prevBallVz = 0f; return; }
-        float vz = ball.Velocity.z;
-        if (vz < -0.1f) shortBall = false; // coming back to the player
-        else if (vz > 0.1f && prevBallVz <= 0.1f) // just hit away by the player
-            shortBall = !serving && PredictLanding(out Vector3 land) && land.z > 0f && land.z < shortBallZone;
-        if (serving) shortBall = false;
-        prevBallVz = vz;
-        ballLean = ball.Position.x * followBallX;
+        bool visible = ball != null && ball.gameObject.activeInHierarchy;
+        bool trigger = false;
+        if (visible != hadBall) { hadBall = visible; trigger = true; if (visible) prevHorizontal = new Vector2(ball.Velocity.x, ball.Velocity.z); }
+        if (!visible) { shortBall = false; ballLean = 0f; return trigger; }
+        if (serving != prevServing)
+        {
+            prevServing = serving; trigger = true;
+            if (serving) { shortBall = false; ballLean = 0f; }
+        }
+        Vector2 hv = new Vector2(ball.Velocity.x, ball.Velocity.z);
+        bool hit = hv.magnitude > HitMinSpeed && (hv - prevHorizontal).magnitude > HitJump;
+        prevHorizontal = hv;
+        if (hit && !serving)
+        {
+            bool landing = PredictLanding(out Vector3 land);
+            shortBall = hv.y > 0f && landing && land.z > 0f && land.z < shortBallZone;
+            ballLean = (landing ? land.x : ball.Position.x) * followBallX;
+            trigger = true;
+        }
+        return trigger;
     }
 
     // Where the camera wants to be: panned to the ball, then backed off until the racket (and, when needed, the area behind the baseline) fits.
     Vector3 Target()
     {
         UpdateFocus();
-        UpdateBall();
         float pan = Mathf.Clamp(ballLean, -maxPan, maxPan);
         Vector3 centre = lookAt + new Vector3(pan, 0f, 0f);
 
